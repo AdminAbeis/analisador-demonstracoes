@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Analisador de Demonstrações</title>
+<meta name="description" content="Análise de balanço patrimonial e DRE de companhias abertas com os índices da disciplina e textos interpretativos.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: ferramenta de leitura. Barra da empresa (busca + períodos), abas fixas, coluna de 920px; tabelas rolam no próprio contêiner. */
+:root {
+  --paper: #F2F4F1; --surface: #FFFFFF; --ink: #17201C; --muted: #56645E; --rule: #D6DDD8; --rule-strong: #A9B5AE;
+  --accent: #0D6656; --accent-soft: #DCEDE8; --accent-ink: #FFFFFF;
+  --good: #2B7537; --good-soft: #E0EFE2; --bad: #A93D29; --bad-soft: #F6E2DC; --flat: #66716B; --flat-soft: #E7EBE8;
+  --warn-soft: #FBF1DC; --warn: #8A5A00;
+  --f-display: 'IBM Plex Sans Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
+  --f-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-num: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #101513; --surface: #171E1B; --ink: #E2E9E5; --muted: #95A39C; --rule: #28322E; --rule-strong: #43514A;
+  --accent: #5BBEA8; --accent-soft: #1B3430; --accent-ink: #0B1210;
+  --good: #73C482; --good-soft: #1A2F1F; --bad: #E58870; --bad-soft: #38211C; --flat: #9BA6A0; --flat-soft: #242C29;
+  --warn-soft: #33290F; --warn: #E2B45A; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --paper: #101513; --surface: #171E1B; --ink: #E2E9E5; --muted: #95A39C; --rule: #28322E; --rule-strong: #43514A;
+  --accent: #5BBEA8; --accent-soft: #1B3430; --accent-ink: #0B1210;
+  --good: #73C482; --good-soft: #1A2F1F; --bad: #E58870; --bad-soft: #38211C; --flat: #9BA6A0; --flat-soft: #242C29;
+  --warn-soft: #33290F; --warn: #E2B45A; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 920px; margin: 0 auto; padding-inline: 16px; }
+header.topo { padding-block: 26px 16px; display: grid; gap: 12px; }
+.eyebrow { font-family: var(--f-num); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(28px, 6vw, 42px); line-height: 1.05; margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+.meta { color: var(--muted); font-size: 13.5px; max-width: 72ch; margin: 0; }
+select, input[type=text], input[type=search], textarea {
+  font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 6px; padding: 7px 10px; min-width: 0;
+}
+textarea { width: 100%; font-family: var(--f-num); font-size: 12.5px; min-height: 140px; }
+select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible, .aba:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn { font: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 7px 12px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.primario { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primario:hover { filter: brightness(1.08); color: var(--accent-ink); }
+.btn.mini { font-size: 12.5px; padding: 4px 9px; }
+.btn.fantasma { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.fantasma:hover { color: var(--bad); }
+label.arquivo { position: relative; overflow: hidden; }
+label.arquivo input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+
+/* barra da empresa */
+.empresa-barra { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 12px; }
+.linha-busca { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.linha-busca input { width: 100%; font-size: 15.5px; padding: 9px 12px; }
+.resultados { list-style: none; margin: 0; padding: 0; display: grid; border: 1px solid var(--rule); border-radius: 8px; max-height: 340px; overflow-y: auto; }
+.resultados li + li { border-top: 1px solid var(--rule); }
+.resultados button { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 12px; cursor: pointer; }
+.resultados button:hover, .resultados button:focus-visible { background: var(--accent-soft); outline: none; }
+.resultados button[aria-disabled="true"] { cursor: default; opacity: .65; }
+.resultados button[aria-disabled="true"]:hover { background: transparent; }
+.res-nome { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.res-tick { font-family: var(--f-num); font-size: 12.5px; color: var(--accent); white-space: nowrap; }
+.res-info { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+.periodos { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.periodos label { font-size: 13.5px; color: var(--muted); }
+.status-base { font-size: 12.5px; color: var(--muted); }
+.linha-ferramentas { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+nav.abas { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--rule); }
+nav.abas .wrap { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.aba { font: inherit; font-family: var(--f-display); font-weight: 600; font-size: 15px; letter-spacing: .01em; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); padding: 12px 12px 9px; cursor: pointer; white-space: nowrap; }
+.aba[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.aba:hover { color: var(--ink); }
+
+main { padding-block: 24px 64px; }
+.painel { display: grid; gap: 28px; }
+h2 { font-family: var(--f-display); font-weight: 700; font-size: 26px; line-height: 1.15; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--f-display); font-weight: 600; font-size: 19px; line-height: 1.2; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.leitura { max-width: 68ch; }
+.sintese { color: var(--muted); max-width: 68ch; }
+.grupo { display: grid; gap: 18px; padding-top: 6px; }
+.grupo-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; border-bottom: 2px solid var(--ink); padding-bottom: 6px; }
+.grupo-cab .regra { font-family: var(--f-num); font-size: 11.5px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+
+.rolagem { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--f-num); font-weight: 500; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--paper); white-space: nowrap; }
+td.n, th.n { text-align: right; font-family: var(--f-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.sigla { font-family: var(--f-num); font-weight: 500; white-space: nowrap; }
+td.sigla a { color: var(--accent); text-decoration: none; }
+td.sigla a:hover { text-decoration: underline; }
+tr.total td { font-weight: 600; background: var(--paper); }
+tr.detalhe td:first-child { font-style: italic; color: var(--muted); }
+
+.chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--f-num); font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.bom { background: var(--good-soft); color: var(--good); }
+.chip.ruim { background: var(--bad-soft); color: var(--bad); }
+.chip.neutro { background: var(--flat-soft); color: var(--flat); }
+
+article.indice { display: grid; gap: 10px; padding-block: 18px 4px; border-top: 1px solid var(--rule); scroll-margin-top: 64px; }
+.ind-cab { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.ind-cab .sigla { font-family: var(--f-num); font-weight: 500; font-size: 13px; color: var(--accent-ink); background: var(--accent); border-radius: 4px; padding: 1px 7px; }
+.formula { font-family: var(--f-num); font-size: 13px; color: var(--muted); }
+.calculos { display: flex; flex-wrap: wrap; gap: 4px 18px; font-family: var(--f-num); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.calculos b { color: var(--ink); font-weight: 500; }
+.ind-acoes { display: flex; gap: 8px; }
+
+.conclusao { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 18px 20px; display: grid; gap: 10px; }
+.conclusao ul { margin: 0; padding-left: 18px; display: grid; gap: 8px; max-width: 68ch; }
+.aviso { background: var(--warn-soft); color: var(--ink); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+.aviso strong { color: var(--warn); }
+.aviso ul { margin: 6px 0 0; padding-left: 18px; }
+.nota { font-size: 13px; color: var(--muted); max-width: 72ch; }
+.barra-acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.dados td { padding: 5px 6px; }
+.dados input[type=text] { width: 100%; padding: 5px 7px; font-size: 13.5px; }
+.dados input.valor { text-align: right; font-family: var(--f-num); font-variant-numeric: tabular-nums; width: 120px; }
+.dados input.nome { min-width: 220px; }
+.dados input.periodo { width: 110px; text-align: right; font-family: var(--f-num); font-size: 12px; }
+.dados select { font-size: 12.5px; padding: 5px 6px; max-width: 210px; }
+.dados tr.cab-grupo td { background: var(--paper); font-family: var(--f-display); font-weight: 600; font-size: 15px; padding: 8px 10px; }
+.dados tr.cab-grupo .btn { margin-left: 8px; }
+.check { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.form-params { display: grid; gap: 22px; }
+fieldset { border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px 16px; margin: 0; background: var(--surface); display: grid; gap: 12px; min-width: 0; }
+legend { font-family: var(--f-display); font-weight: 600; font-size: 16px; padding: 0 6px; }
+.campo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 260px); gap: 4px 16px; align-items: center; }
+.campo label { font-size: 14px; }
+.campo small { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
+.campo select, .campo input { width: 100%; }
+@media (max-width: 560px) { .campo, .linha-busca { grid-template-columns: minmax(0, 1fr); } }
+
+.ok { color: var(--good); font-weight: 600; }
+.falha { color: var(--bad); font-weight: 600; }
+.copia-fallback { display: grid; gap: 8px; }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 8px 14px; border-radius: 6px; font-size: 13.5px; z-index: 20; max-width: calc(100% - 32px); }
+footer.rodape { padding-block: 0 40px; color: var(--muted); font-size: 12.5px; }
+footer.rodape a { color: var(--accent); }
+
+@media print {
+  nav.abas, .empresa-barra, .linha-ferramentas, .barra-acoes, .ind-acoes, .toast, footer.rodape, #p-estrutura, #p-dados, #p-params, #p-teste { display: none !important; }
+  #p-analise { display: grid !important; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .rolagem { border: 0; overflow: visible; }
+  article.indice { break-inside: avoid; }
+  .chip { border: 1px solid #999; background: none !important; color: #000 !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topo wrap">
+  <div class="eyebrow">Análise das demonstrações contábeis</div>
+  <h1 id="titulo-empresa">Cia Grega</h1>
+  <p class="meta" id="meta-caso"></p>
+
+  <section class="empresa-barra" aria-label="Escolher empresa">
+    <div class="linha-busca">
+      <input type="search" id="busca" placeholder="Buscar empresa: nome, código (WEGE3) ou CNPJ" autocomplete="off" aria-describedby="status-base" aria-controls="resultados">
+      <select id="sel-exemplo" aria-label="Exemplos e dados próprios">
+        <option value="">Exemplos e dados próprios</option>
+        <option value="cia-grega">Cia Grega (gabarito da professora)</option>
+        <option value="weg">WEG digitada do PDF (2023–2025)</option>
+        <option value="branco">Novo caso em branco</option>
+      </select>
+    </div>
+    <ul class="resultados" id="resultados" hidden></ul>
+    <div class="periodos" id="periodos" hidden>
+      <label for="per-de">De</label><select id="per-de"></select>
+      <label for="per-ate">até</label><select id="per-ate"></select>
+      <span class="status-base" id="info-periodos"></span>
+    </div>
+    <p class="status-base" id="status-base">Carregando a lista de companhias…</p>
+  </section>
+
+  <div class="linha-ferramentas">
+    <label class="btn arquivo" for="arq-importar">Importar CSV ou JSON<input type="file" id="arq-importar" accept=".csv,.json,.txt,text/csv,application/json"></label>
+    <button class="btn" id="btn-copiar-csv" type="button">Copiar dados (CSV)</button>
+    <span id="exportar" hidden>
+      <button class="btn" id="btn-word" type="button">Baixar para o Word</button>
+      <button class="btn" id="btn-pdf" type="button">Imprimir ou salvar PDF</button>
+      <button class="btn" id="btn-json" type="button">Salvar caso (.json)</button>
+    </span>
+  </div>
+</header>
+
+<nav class="abas" aria-label="Seções">
+  <div class="wrap" role="tablist">
+    <button class="aba" role="tab" id="t-analise" aria-controls="p-analise" aria-selected="true">Análise</button>
+    <button class="aba" role="tab" id="t-estrutura" aria-controls="p-estrutura" aria-selected="false">AV e AH</button>
+    <button class="aba" role="tab" id="t-dados" aria-controls="p-dados" aria-selected="false">Dados</button>
+    <button class="aba" role="tab" id="t-params" aria-controls="p-params" aria-selected="false">Parâmetros</button>
+    <button class="aba" role="tab" id="t-teste" aria-controls="p-teste" aria-selected="false">Teste</button>
+  </div>
+</nav>
+
+<main class="wrap">
+  <section class="painel" id="p-analise" role="tabpanel" aria-labelledby="t-analise"></section>
+  <section class="painel" id="p-estrutura" role="tabpanel" aria-labelledby="t-estrutura" hidden></section>
+  <section class="painel" id="p-dados" role="tabpanel" aria-labelledby="t-dados" hidden></section>
+  <section class="painel" id="p-params" role="tabpanel" aria-labelledby="t-params" hidden></section>
+  <section class="painel" id="p-teste" role="tabpanel" aria-labelledby="t-teste" hidden></section>
+</main>
+
+<footer class="rodape wrap" id="rodape"></footer>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="engine.js"></script>
+<script src="exemplos.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
