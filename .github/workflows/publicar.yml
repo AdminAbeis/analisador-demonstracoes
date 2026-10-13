@@ -1,0 +1,62 @@
+name: Atualizar dados e publicar
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 9 * * 1"   # toda segunda-feira, 6h em Brasília (a CVM atualiza os arquivos semanalmente)
+  workflow_dispatch:       # botão "Run workflow" na aba Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Testes (rotina da CVM e motor de análise)
+        run: |
+          python pipeline/test_cvm.py
+          node tests/engine.test.js
+
+      - name: Baixar e processar as DFPs da CVM
+        run: |
+          mkdir -p _site
+          cp index.html app.js engine.js exemplos.js _site/
+          touch _site/.nojekyll
+          python pipeline/cvm.py --saida _site/data
+          du -sh _site/data
+          ls _site/data/cia | wc -l
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
