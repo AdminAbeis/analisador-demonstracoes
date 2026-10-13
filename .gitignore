@@ -1,0 +1,8 @@
+# dados gerados pela rotina (o GitHub Actions gera e publica a cada execução)
+/data/
+/_site/
+/.cache-cvm/
+tests/fixtures/cvm/
+tests/fixtures/saida/
+__pycache__/
+.DS_Store
