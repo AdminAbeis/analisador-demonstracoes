@@ -4,8 +4,10 @@ Baixa as Demonstrações Financeiras Padronizadas (DFP) do portal de dados abert
 da CVM e gera os arquivos que a página usa:
 
   <saida>/empresas.json        lista de empresas com os anos disponíveis
-  <saida>/cia/<CD_CVM>.json    balanço e DRE de cada empresa, já classificados
-                               no plano de contas do sistema (valores em R$ mil)
+  <saida>/cia/<CD_CVM>.json    balanço, DRE e resumo da DFC de cada empresa, já
+                               classificados no plano de contas do sistema (R$ mil)
+  <saida>/dfp/<CD_CVM>.json    demonstrações completas (BP ativo e passivo, DRE e DFC)
+                               com os códigos e descrições da CVM, como no RAD
 
 Uso:
   python pipeline/cvm.py --saida _site/data
@@ -153,72 +155,77 @@ class Base:
     def __init__(self):
         # (cd_cvm, base, data_fim, ordem) -> {versao: {cd_conta: (ds, valor)}}
         self.valores = defaultdict(lambda: defaultdict(dict))
-        self.nomes = {}      # cd_cvm -> (dt_refer, nome)
+        self.metodo_dfc = {}  # (cd_cvm, base, data_fim, ordem) -> "indireto" | "direto"
+        self.nomes = {}       # cd_cvm -> (dt_refer, nome)
         self.cnpj = {}
 
     def ler_zip(self, dados, ano):
         z = zipfile.ZipFile(io.BytesIO(dados))
         nomes = z.namelist()
         lidos = 0
-        for demo in ("BPA", "BPP", "DRE"):
-            for base in ("con", "ind"):
+        # consolidado primeiro; o individual só é guardado quando não há consolidado
+        for base in ("con", "ind"):
+            for demo in ("BPA", "BPP", "DRE", "DFC_MI", "DFC_MD"):
                 alvo = [n for n in nomes if re.search(rf"_{demo}_{base}_\d{{4}}\.csv$", n, re.I)]
                 if not alvo:
                     continue
                 for row in ler_csv(z.read(alvo[0])):
-                    self._linha(row, base)
-                    lidos += 1
+                    if self._linha(row, base, demo):
+                        lidos += 1
         return lidos
 
-    def _linha(self, row, base):
+    def _linha(self, row, base, demo):
         cd_conta = (row.get("CD_CONTA") or "").strip()
-        if not cd_conta:
-            return
-        nivel = cd_conta.count(".") + 1
-        if cd_conta.startswith("3"):
-            if nivel > 2:
-                return
-        elif nivel > 5:
-            return
+        if not cd_conta or cd_conta[0] not in "1236" or cd_conta.startswith("3.99"):
+            return False
         try:
             cd = str(int(row["CD_CVM"]))
         except (KeyError, ValueError):
-            return
+            return False
         ordem = sem_acento(row.get("ORDEM_EXERC"))
         ordem = "ULTIMO" if ordem.startswith("ULT") else "PENULTIMO" if ordem.startswith("PEN") else None
         if not ordem:
-            return
+            return False
         data_fim = (row.get("DT_FIM_EXERC") or "").strip()
         if not data_fim:
-            return
+            return False
         valor = numero(row.get("VL_CONTA"))
-        if valor is None:
-            return
+        if not valor:          # vazio ou zero: a conta não é guardada
+            return False
+        chave = (cd, base, data_fim, ordem)
+        if base == "ind" and (cd, "con", data_fim, ordem) in self.valores:
+            return False
+        if demo == "DFC_MD":
+            if self.metodo_dfc.get(chave) == "indireto":
+                return False
+            self.metodo_dfc[chave] = "direto"
+        elif demo == "DFC_MI":
+            self.metodo_dfc[chave] = "indireto"
         if sem_acento(row.get("ESCALA_MOEDA")) == "UNIDADE":
             valor = valor / 1000.0
         try:
             versao = int(row.get("VERSAO") or 1)
         except ValueError:
             versao = 1
-        ds = (row.get("DS_CONTA") or "").strip()
-        self.valores[(cd, base, data_fim, ordem)][versao][cd_conta] = (ds, valor)
+        ds = sys.intern((row.get("DS_CONTA") or "").strip())
+        self.valores[chave][versao][sys.intern(cd_conta)] = (ds, valor)
         refer = (row.get("DT_REFER") or "").strip()
         nome = (row.get("DENOM_CIA") or "").strip()
         if nome and (cd not in self.nomes or refer >= self.nomes[cd][0]):
             self.nomes[cd] = (refer, nome)
             self.cnpj[cd] = (row.get("CNPJ_CIA") or "").strip()
+        return True
 
     def periodos(self):
-        """cd -> base -> data_fim -> {cd_conta: (ds, valor)}; usa o ÚLTIMO de cada DFP
-        e completa com o PENÚLTIMO da DFP seguinte só quando o ano não existe."""
+        """cd -> base -> data_fim -> ({cd_conta: (ds, valor)}, metodo_dfc); usa o ÚLTIMO de cada
+        DFP e completa com o PENÚLTIMO da DFP seguinte só quando o ano não existe."""
         out = defaultdict(lambda: defaultdict(dict))
         for ordem in ("ULTIMO", "PENULTIMO"):
-            for (cd, base, data_fim, o), versoes in self.valores.items():
-                if o != ordem:
+            for chave, versoes in self.valores.items():
+                cd, base, data_fim, o = chave
+                if o != ordem or data_fim in out[cd][base]:
                     continue
-                if data_fim in out[cd][base]:
-                    continue
-                out[cd][base][data_fim] = versoes[max(versoes)]
+                out[cd][base][data_fim] = (versoes[max(versoes)], self.metodo_dfc.get(chave, ""))
         return out
 
 
@@ -238,18 +245,19 @@ def montar_empresa(cd, por_base):
     escolhidos = []
     for d in datas:
         for base in ("con", "ind"):
-            contas = por_base.get(base, {}).get(d)
+            par = por_base.get(base, {}).get(d)
+            contas = par[0] if par else None
             if contas and "1" in contas and "2" in contas and "3.01" in contas:
-                escolhidos.append((d, base, contas))
+                escolhidos.append((d, base, contas, par[1]))
                 break
     if not escolhidos:
         return None
-    if eh_financeira({d: c for d, _, c in escolhidos}):
+    if eh_financeira({e[0]: e[2] for e in escolhidos}):
         return {"financeira": True}
     # um período por ano; se houver duas datas no mesmo ano, fica a mais recente
     por_ano = {}
-    for d, base, contas in escolhidos:
-        por_ano[d[:4]] = (d, base, contas)
+    for e in escolhidos:
+        por_ano[e[0][:4]] = e
     escolhidos = [por_ano[a] for a in sorted(por_ano)]
 
     n = len(escolhidos)
@@ -262,12 +270,12 @@ def montar_empresa(cd, por_base):
             linhas.append({"nome": nome, "cod": cod, "cd": cd_conta, "v": [None] * n})
         return linhas[idx[chave]]
 
-    todas = [c for _, _, c in escolhidos]
+    todas = [e[2] for e in escolhidos]
     nivel3 = sorted({c for contas in todas for c in contas if c.count(".") == 2 and c[0] in "12"})
     usar = []
     for c3 in nivel3:
         usar.extend(folhas(c3, todas))
-    for i, (d, base, contas) in enumerate(escolhidos):
+    for i, (d, base, contas, _m) in enumerate(escolhidos):
         soma = defaultdict(float)
         for cd_conta in usar:
             if cd_conta not in contas:
@@ -278,7 +286,7 @@ def montar_empresa(cd, por_base):
                 continue
             cod = MAPA.get(cd_conta[:7]) or OUTROS[grupo]
             ln = linha(cd_conta, ds, cod, cd_conta)
-            ln["v"][i] = round(valor, 2)
+            ln["v"][i] = r2(valor)
             soma[grupo] += valor
         for grupo, cd_total in TOTAIS.items():
             if cd_total not in contas:
@@ -286,18 +294,23 @@ def montar_empresa(cd, por_base):
             dif = contas[cd_total][1] - soma[grupo]
             if abs(dif) > 0.5:
                 ln = linha("dif-" + grupo, "Outras contas do grupo (diferença para o total informado)", OUTROS[grupo], cd_total)
-                ln["v"][i] = round(dif, 2)
+                ln["v"][i] = r2(dif)
         for cd_conta, cod, inverte in DRE:
             if cd_conta in contas:
                 ds, valor = contas[cd_conta]
                 ln = linha(cd_conta, ds, cod, cd_conta)
-                ln["v"][i] = round(-valor if inverte else valor, 2)
+                ln["v"][i] = r2(-valor if inverte else valor)
 
     # nomes das contas: usa a descrição do período mais recente (já está, pois sorted por data)
-    for i, (d, base, contas) in enumerate(escolhidos):
+    for i, (d, base, contas, _m) in enumerate(escolhidos):
         for ln in linhas:
             if ln["cd"] in contas and ln["v"][i] is not None and not ln["nome"].startswith("Outras contas do grupo"):
                 ln["nome"] = contas[ln["cd"]][0] or ln["nome"]
+
+    # contas ausentes num período em que a empresa entregou a DFP valem zero (a CVM omite contas zeradas)
+    for ln in linhas:
+        if not ln["nome"].startswith("Outras contas do grupo"):
+            ln["v"] = [0 if v is None else v for v in ln["v"]]
 
     ordem_cod = {g: k for k, g in enumerate(ORDEM_GRUPOS + ["DRE"])}
     linhas.sort(key=lambda l: (ordem_cod[l["cod"].split(".")[0]], l["cd"] if not l["nome"].startswith("Outras contas do grupo") else "9"))
@@ -305,10 +318,83 @@ def montar_empresa(cd, por_base):
     linhas = [l for l in linhas if any(v not in (None, 0) for v in l["v"])]
 
     periodos = []
-    for d, base, _ in escolhidos:
+    for d, base, _c, metodo in escolhidos:
         rot = d[:4] if d[5:7] == "12" else d[:7]
-        periodos.append({"rotulo": rot, "data": d, "base": base})
-    return {"periodos": periodos, "contas": linhas}
+        periodos.append({"rotulo": rot, "data": d, "base": base, "dfc": metodo})
+    return {"periodos": periodos, "contas": linhas,
+            "dfc": resumo_dfc([e[2] for e in escolhidos]),
+            "completo": demonstracoes_completas([e[2] for e in escolhidos])}
+
+
+def r2(v):
+    """Arredonda para 2 casas e grava como inteiro quando não há centavos (arquivos menores)."""
+    v = round(v, 2)
+    return int(v) if float(v).is_integer() else v
+
+
+def chave_codigo(c):
+    return tuple(int(x) for x in c.split(".") if x.isdigit())
+
+
+def demonstracoes_completas(lista_contas):
+    """Todas as contas informadas, por demonstração, no formato do RAD da CVM."""
+    n = len(lista_contas)
+    codigos = sorted({c for contas in lista_contas for c in contas}, key=chave_codigo)
+    out = {"BPA": [], "BPP": [], "DRE": [], "DFC": []}
+    grupo = {"1": "BPA", "2": "BPP", "3": "DRE", "6": "DFC"}
+    for c in codigos:
+        ds = ""
+        v = [None] * n
+        for i, contas in enumerate(lista_contas):
+            if c in contas:
+                ds = contas[c][0] or ds
+                v[i] = r2(contas[c][1])
+        out[grupo[c[0]]].append({"c": c, "d": ds, "v": v})
+    return out
+
+
+def resumo_dfc(lista_contas):
+    """Linhas-chave da DFC para a aba Estruturas, com códigos do sistema.
+    Contas fixas da CVM: 6.01 operacionais, 6.01.01 caixa gerado nas operações,
+    6.01.02 variações nos ativos e passivos, 6.02 investimento, 6.03 financiamento,
+    6.04 variação cambial, 6.05 aumento/redução, 6.05.01 saldo inicial, 6.05.02 saldo final."""
+    n = len(lista_contas)
+    fixas = [("DFC.OPG", "6.01.01"), ("DFC.VCG", "6.01.02"), ("DFC.OP", "6.01"), ("DFC.INV", "6.02"),
+             ("DFC.FIN", "6.03"), ("DFC.CAMB", "6.04"), ("DFC.VAR", "6.05"), ("DFC.INI", "6.05.01"), ("DFC.FIM", "6.05.02")]
+    linhas = {}
+
+    def put(cod, nome, cd, i, valor):
+        ln = linhas.setdefault(cod, {"cod": cod, "nome": nome, "cd": cd, "v": [None] * n})
+        ln["v"][i] = r2(valor)
+        if nome:
+            ln["nome"] = nome
+
+    for i, contas in enumerate(lista_contas):
+        if not any(c.startswith("6") for c in contas):
+            continue
+        for cod, cd in fixas:
+            if cd in contas:
+                put(cod, contas[cd][0], cd, i, contas[cd][1])
+        filhos = lambda pai: sorted((c for c in contas if c.startswith(pai + ".") and c.count(".") == pai.count(".") + 1), key=chave_codigo)
+        op = filhos("6.01.01")
+        if op:  # ponto de partida: primeira linha do caixa gerado nas operações (lucro líquido ou antes dos impostos)
+            put("DFC.LUC", contas[op[0]][0], op[0], i, contas[op[0]][1])
+        dep = [c for c in op if "DEPRECI" in sem_acento(contas[c][0]) or "AMORTIZ" in sem_acento(contas[c][0])]
+        if dep:
+            put("DFC.DEP", contas[dep[0]][0], dep[0], i, sum(contas[c][1] for c in dep))
+        capex = [c for c in filhos("6.02") if any(k in sem_acento(contas[c][0]) for k in ("IMOBILIZ", "INTANG"))
+                 and any(k in sem_acento(contas[c][0]) for k in ("AQUISI", "ADICO", "ADICA", "COMPRA", "INVESTIMENTO EM", "AUMENTO D"))]
+        if capex:
+            put("DFC.CAPEX", "Aquisição de imobilizado e intangível (CAPEX)", ",".join(capex), i, sum(contas[c][1] for c in capex))
+        emp = [c for c in filhos("6.03") if any(k in sem_acento(contas[c][0]) for k in ("EMPREST", "FINANCIAM", "DEBENT"))]
+        if emp:
+            put("DFC.EMP", "Empréstimos: captações menos pagamentos", ",".join(emp), i, sum(contas[c][1] for c in emp))
+        div = [c for c in filhos("6.03") if any(k in sem_acento(contas[c][0]) for k in ("DIVIDEN", "CAPITAL PROPRIO", "JCP"))]
+        if div:
+            put("DFC.DIV", "Dividendos e JCP pagos", ",".join(div), i, sum(contas[c][1] for c in div))
+    ordem = ["DFC.LUC", "DFC.DEP", "DFC.OPG", "DFC.VCG", "DFC.OP", "DFC.CAPEX", "DFC.INV", "DFC.EMP", "DFC.DIV",
+             "DFC.FIN", "DFC.CAMB", "DFC.VAR", "DFC.INI", "DFC.FIM"]
+    return [linhas[c] for c in ordem if c in linhas]
 
 
 # --------------------------------------------------------------------------
@@ -394,6 +480,7 @@ def main():
     tickers = ler_tickers(anos_lidos, args.fonte, args.cache)
 
     os.makedirs(os.path.join(args.saida, "cia"), exist_ok=True)
+    os.makedirs(os.path.join(args.saida, "dfp"), exist_ok=True)
     lista, n_fin, n_vazias = [], 0, 0
     for cd, por_base in sorted(base.periodos().items(), key=lambda x: int(x[0])):
         emp = montar_empresa(cd, por_base)
@@ -418,10 +505,14 @@ def main():
             "escala": "R$ mil",
             "fonte": "CVM, Dados Abertos: Demonstrações Financeiras Padronizadas (DFP). Valores em R$ mil; "
                      "custos, despesas e impostos com sinal positivo.",
-            "periodos": emp["periodos"], "contas": emp["contas"],
+            "periodos": emp["periodos"], "contas": emp["contas"], "dfc": emp["dfc"],
         }
         with open(os.path.join(args.saida, "cia", f"{cd}.json"), "w", encoding="utf-8") as f:
             json.dump(doc, f, ensure_ascii=False, separators=(",", ":"))
+        completo = {"cd_cvm": cd, "empresa": nome, "escala": "R$ mil",
+                    "periodos": [p["rotulo"] for p in emp["periodos"]], **emp["completo"]}
+        with open(os.path.join(args.saida, "dfp", f"{cd}.json"), "w", encoding="utf-8") as f:
+            json.dump(completo, f, ensure_ascii=False, separators=(",", ":"))
 
     meta = {
         "atualizado": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d"),

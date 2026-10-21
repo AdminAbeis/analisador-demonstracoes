@@ -178,6 +178,387 @@ function aplicarEmpresa(de, ate) {
   aplicarEmpresa(de, ate);
 }));
 
+// ---------- dicas de cálculo (mouse no computador, toque no celular) ----------
+const TIPS = new Map(); let tipN = 0;
+function tip(o) { const id = 'd' + (++tipN); TIPS.set(id, o); return ` data-tip="${id}" tabindex="0"`; }
+const fmtR = v => v == null ? '—' : fmtN(v, Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2);
+const fmtSin = v => v == null ? '—' : v < 0 ? `(${fmtR(-v)})` : fmtR(v);
+const semArt = s => s.replace(/^(o|a) /, '');
+const cap1 = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+function tipHTML(o) {
+  let h = `<div class="tip-tit">${esc(o.titulo)}</div>`;
+  if (o.formula) h += `<div class="tip-f">${esc(o.formula)}</div>`;
+  if (o.conta) h += `<div class="tip-c">${esc(o.conta)}</div>`;
+  for (const b of (o.blocos || [])) {
+    if (!b) continue;
+    h += `<div class="tip-b">${b.titulo ? `<div class="tip-bt">${esc(b.titulo)}</div>` : ''}<table>`;
+    const MAX = 12;
+    h += b.itens.slice(0, MAX).map(([n, v]) => `<tr><td>${esc(n)}</td><td class="n">${esc(v)}</td></tr>`).join('');
+    if (b.itens.length > MAX) h += `<tr><td colspan="2" class="tip-mais">e mais ${b.itens.length - MAX} itens</td></tr>`;
+    if (b.total) h += `<tr class="tip-tot"><td>${esc(b.total[0])}</td><td class="n">${esc(b.total[1])}</td></tr>`;
+    h += `</table></div>`;
+  }
+  if (o.nota) h += `<div class="tip-n">${esc(o.nota)}</div>`;
+  return h;
+}
+const dica = $('#dica'); let dicaAlvo = null, dicaFixa = false;
+const estreito = () => window.matchMedia('(max-width: 700px)').matches;
+function mostrarDica(el, fixa, folha) {
+  const o = TIPS.get(el.dataset.tip); if (!o) return;
+  if (dicaAlvo && dicaAlvo !== el) dicaAlvo.removeAttribute('aria-describedby');
+  dica.innerHTML = (folha ? '<button class="dica-fechar" type="button" aria-label="Fechar">×</button>' : '') + tipHTML(o);
+  dica.classList.toggle('folha', !!folha);
+  dica.style.left = '0px'; dica.style.top = '0px';
+  dica.hidden = false; dicaAlvo = el; dicaFixa = fixa;
+  el.setAttribute('aria-describedby', 'dica');
+  if (!folha) {
+    const r = el.getBoundingClientRect(), w = dica.offsetWidth, hh = dica.offsetHeight;
+    let x = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
+    let y = r.bottom + 8; if (y + hh > window.innerHeight - 8) y = Math.max(8, r.top - hh - 8);
+    dica.style.left = x + 'px'; dica.style.top = y + 'px';
+  }
+}
+function esconderDica() { dica.hidden = true; if (dicaAlvo) dicaAlvo.removeAttribute('aria-describedby'); dicaAlvo = null; dicaFixa = false; }
+let ultimoToque = 0;
+document.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') ultimoToque = Date.now(); }, true);
+const tocouAgora = () => Date.now() - ultimoToque < 800;
+document.addEventListener('pointerover', e => {
+  if (e.pointerType !== 'mouse' || dicaFixa || tocouAgora()) return;
+  const el = e.target.closest && e.target.closest('[data-tip]');
+  if (el && el !== dicaAlvo) mostrarDica(el, false, false);
+});
+document.addEventListener('pointerout', e => {
+  if (e.pointerType !== 'mouse' || dicaFixa || !dicaAlvo) return;
+  const para = e.relatedTarget;
+  if (para && (dicaAlvo.contains(para) || (para.closest && para.closest('#dica')))) return;
+  esconderDica();
+});
+document.addEventListener('click', e => {
+  if (e.target.closest('.dica-fechar')) { esconderDica(); return; }
+  const el = e.target.closest('[data-tip]');
+  if (el) {
+    if (dicaFixa && dicaAlvo === el) { esconderDica(); return; }
+    mostrarDica(el, true, estreito() || tocouAgora());
+    return;
+  }
+  if (dicaFixa && !e.target.closest('#dica')) esconderDica();
+});
+document.addEventListener('focusin', e => { if (tocouAgora()) return; const el = e.target.closest && e.target.closest('[data-tip]'); if (el && !dicaFixa) mostrarDica(el, false, false); });
+document.addEventListener('focusout', e => { if (!dicaFixa && dicaAlvo && e.target === dicaAlvo) esconderDica(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !dica.hidden) { esconderDica(); return; }
+  const el = e.target.closest && e.target.closest('[data-tip]');
+  if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); mostrarDica(el, true, estreito()); }
+});
+window.addEventListener('scroll', () => { if (!dica.hidden && !dica.classList.contains('folha')) esconderDica(); }, { passive: true, capture: true });
+
+function blocoLado(titulo, lado, total) {
+  if (!lado || !lado.contas) return null;
+  const itens = lado.contas.map(c => [(c.k < 0 ? '(−) ' : '') + c.nome, c.media ? `(${fmtR(c.v0)} + ${fmtR(c.v1)}) ÷ 2 = ${fmtR(c.v)}` : fmtR(c.v)]);
+  return { titulo, itens, total: lado.contas.length > 1 ? ['Total', fmtR(total)] : null };
+}
+function tipIndice(i, k) {
+  const per = state.caso.periodos[k];
+  const t = { titulo: `${nomeIndice(i)} (${i.id}) · ${per}`, formula: i.formula };
+  const det = i.detalhe[k];
+  if (i.vals[k] == null || !det) {
+    const semEI = (i.id === 'PMPC' || i.id === 'CF') && k === 0;
+    t.nota = 'Não calculável neste período: ' + (semEI ? 'falta o estoque do período anterior para apurar as compras (CMV = EI + C − EF).'
+      : state.params.saldos === 'medio' && k === 0 ? 'o saldo médio exige o saldo do período anterior.' : 'faltam dados para o numerador ou o denominador.');
+    return t;
+  }
+  if (det.partes) {
+    t.conta = det.partes.map((p, j) => `${j ? (p.k > 0 ? ' + ' : ' − ') : ''}${fmtN(p.v, 0)}`).join('') + ` = ${i.fmt[k]} dias`;
+    t.blocos = [{ itens: det.partes.map(p => [`${p.k < 0 ? '(−) ' : ''}${cap1(semArt(p.nome))} (${p.id})`, fmtN(p.v, 1) + ' dias']) }];
+    t.nota = 'Os prazos são arredondados na tabela; a soma usa os valores exatos.';
+    return t;
+  }
+  t.conta = `${fmtR(det.N)} ÷ ${fmtR(det.D)}${det.mult !== 1 ? ' × ' + det.mult : ''} = ${i.fmt[k]}`;
+  const c = det.den.compras;
+  t.blocos = [
+    blocoLado('Numerador: ' + semArt(det.rotN), det.num, det.N),
+    c ? (c.informado != null ? { titulo: 'Denominador: compras (informadas)', itens: [['Compras', fmtR(c.informado)]] }
+      : { titulo: 'Denominador: compras = CMV − estoque inicial + estoque final', itens: [['CMV', fmtR(c.cmv)], ['(−) Estoque inicial', fmtR(c.ei)], ['(+) Estoque final', fmtR(c.ef)]], total: ['Compras', fmtR(c.total)] })
+      : blocoLado('Denominador: ' + semArt(det.rotD), det.den, det.D)
+  ];
+  return t;
+}
+function tipEvolucao(i) {
+  const per = state.caso.periodos, t = i.t;
+  const fv = v => E.fmtVal(i.unid, v, state.params);
+  return {
+    titulo: `Evolução de ${nomeIndice(i).toLowerCase()} no período`,
+    formula: `valor de ${per[t.i1]} − valor de ${per[t.i0]}`,
+    conta: `${fv(t.v1)} − ${fv(t.v0)} = ${i.delta}`,
+    nota: `${i.dir > 0 ? 'Quanto maior, melhor' : 'Quanto menor, melhor'}: por isso a ${t.d > 0 ? 'alta' : 'queda'} é ${t.est ? 'tratada como estabilidade (dentro da faixa definida em Parâmetros)' : t.melhora ? 'uma melhora' : 'uma piora'}.`
+  };
+}
+
+// ---------- Estruturas: BP, DRE e DFC conectados ----------
+const NOME_COD = Object.fromEntries(E.CODIGOS);
+const NOME_CURTO = {
+  'AC.DISP': 'Caixa e equivalentes', 'AC.APLIC': 'Aplicações financeiras', 'AC.CLI': 'Clientes', 'AC.EST': 'Estoques',
+  'AC.DESPANT': 'Despesas antecipadas', 'AC.OUT': 'Outros AC', 'ANC.RLP': 'Realizável a longo prazo', 'ANC.INV': 'Investimentos',
+  'ANC.IMOB': 'Imobilizado', 'ANC.INT': 'Intangível', 'PC.FORN': 'Fornecedores', 'PC.EMP': 'Empréstimos', 'PC.OUT': 'Outros PC',
+  'PNC.EMP': 'Empréstimos', 'PNC.OUT': 'Outros PNC', 'PL.CAP': 'Capital social', 'PL.RES': 'Reservas de lucros', 'PL.OUT': 'Outras contas do PL'
+};
+function somaCod(cod, k, soDetalheFora = true) {
+  const cs = state.caso.contas.filter(c => c.cod === cod && !(soDetalheFora && c.detalhe));
+  const vals = cs.map(c => E.num(c.v[k])).filter(v => v != null);
+  return vals.length ? { v: vals.reduce((a, b) => a + b, 0), contas: cs.filter(c => E.num(c.v[k]) != null).map(c => [c.nome, E.num(c.v[k])]) } : null;
+}
+function somaGrupo(g, k) {
+  const cs = state.caso.contas.filter(c => c.cod.startsWith(g + '.') && !c.detalhe && E.num(c.v[k]) != null);
+  return cs.length ? cs.reduce((a, c) => a + E.num(c.v[k]), 0) : null;
+}
+function custoPos(cod, k) { // custos e despesas como valor positivo (mesma regra do motor)
+  const r = somaCod(cod, k); if (!r) return null;
+  if (state.caso.sinais === 'despesa_positiva') return r;
+  const todos = state.caso.contas.filter(c => c.cod === cod).flatMap(c => c.v.map(E.num)).filter(v => v != null && v !== 0);
+  return todos.length && todos.every(v => v < 0) ? { v: -r.v, contas: r.contas.map(([n, v]) => [n, -v]) } : r;
+}
+function linhaEst(nome, v, opts = {}) {
+  const cls = ['lin', opts.cls || ''].join(' ');
+  const badge = (opts.lig || []).map(n => `<span class="lig l${n}" aria-label="ligação ${n}">${n}</span>`).join('');
+  return `<div class="${cls}"${opts.ancora ? ` data-ancora="${opts.ancora}"` : ''}><span class="nm">${badge}<span>${esc(nome)}${opts.calc ? ' <span class="calc">(calculado)</span>' : ''}</span></span><span class="v"${opts.tip ? tip(opts.tip) : ''}>${opts.sinal ? fmtSin(v) : fmtR(v)}</span></div>`;
+}
+function tipComp(titulo, itens, total, nota) {
+  return { titulo, blocos: [{ itens: itens.map(([n, v]) => [n, fmtSin(v)]), total: itens.length > 1 ? ['Total', fmtSin(total)] : null }], nota };
+}
+function estruturaDados(k) {
+  const per = state.caso.periodos[k];
+  // Balanço
+  const lado = grupos => grupos.map(([g, titulo, ancora, lig]) => {
+    const tot = somaGrupo(g, k);
+    if (tot == null) return null;
+    const cods = E.CODIGOS.map(([c]) => c).filter(c => c.startsWith(g + '.'));
+    const linhas = cods.map(c => ({ c, r: somaCod(c, k) })).filter(x => x.r);
+    const itensGrupo = state.caso.contas.filter(c => c.cod.startsWith(g + '.') && !c.detalhe && E.num(c.v[k]) != null).map(c => [c.nome, E.num(c.v[k])]);
+    return { g, titulo, tot, ancora, lig, tipTot: tipComp(`${titulo} · ${per}`, itensGrupo, tot, 'Soma das contas do grupo.'),
+      linhas: linhas.map(({ c, r }) => ({ c, nome: NOME_CURTO[c] || NOME_COD[c], v: r.v, tip: tipComp(`${NOME_CURTO[c] || NOME_COD[c]} · ${per}`, r.contas, r.v, r.contas.length > 1 ? 'Contas da empresa somadas nesta linha.' : 'Conta da empresa.') })) };
+  }).filter(Boolean);
+  const ativo = lado([['AC', 'Ativo circulante'], ['ANC', 'Ativo não circulante']]);
+  const passivo = lado([['PC', 'Passivo circulante'], ['PNC', 'Passivo não circulante'], ['PL', 'Patrimônio líquido', 'pl', [1]]]);
+  const AT = (somaGrupo('AC', k) || 0) + (somaGrupo('ANC', k) || 0);
+  const PT = (somaGrupo('PC', k) || 0) + (somaGrupo('PNC', k) || 0) + (somaGrupo('PL', k) || 0);
+  // DRE
+  const g = cod => somaCod(cod, k);
+  const RL = g('DRE.RL'), CMV = custoPos('DRE.CMV', k), DOP = custoPos('DRE.DOP', k), IR = custoPos('DRE.IR', k);
+  const LB0 = g('DRE.LB'), RO0 = g('DRE.RO'), RF = g('DRE.RFIN'), LAIR0 = g('DRE.OUT'), LL = g('DRE.LL');
+  const dre = [];
+  const pushL = (nome, v, o) => { if (v != null) dre.push({ nome, v, ...o }); };
+  pushL('Receita líquida', RL && RL.v, { tip: RL && tipComp(`Receita líquida · ${per}`, RL.contas, RL.v) });
+  pushL('(−) Custos', CMV && -CMV.v, { tip: CMV && tipComp(`Custos · ${per}`, CMV.contas.map(([n, v]) => [n, -v]), -CMV.v) });
+  let LB = LB0 ? LB0.v : (RL && CMV ? RL.v - CMV.v : null);
+  if (LB != null) pushL('Resultado bruto', LB, { cls: 'res', calc: !LB0, tip: { titulo: `Resultado bruto · ${per}`, formula: 'Receita líquida − custos', conta: RL && CMV ? `${fmtR(RL.v)} − ${fmtR(CMV.v)} = ${fmtSin(LB)}` : '', nota: LB0 ? 'Valor informado pela empresa.' : 'Calculado pelo sistema.' } });
+  pushL('(−) Despesas operacionais', DOP && -DOP.v, { tip: DOP && tipComp(`Despesas operacionais · ${per}`, DOP.contas.map(([n, v]) => [n, -v]), -DOP.v, 'Despesas com vendas, administrativas e outras receitas e despesas operacionais (líquidas).') });
+  const RO = RO0 ? RO0.v : (LB != null && DOP ? LB - DOP.v : null);
+  if (RO != null) pushL('Resultado operacional', RO, { cls: 'res', calc: !RO0, tip: { titulo: `Resultado operacional · ${per}`, formula: 'Resultado bruto − despesas operacionais', conta: LB != null && DOP ? `${fmtSin(LB)} − ${fmtR(DOP.v)} = ${fmtSin(RO)}` : '' } });
+  pushL('Resultado financeiro', RF && RF.v, { sinal: true, tip: RF && tipComp(`Resultado financeiro · ${per}`, RF.contas, RF.v, 'Receitas financeiras menos despesas financeiras.') });
+  const LAIR = LAIR0 ? LAIR0.v : (RO != null && RF ? RO + RF.v : null);
+  if (LAIR != null) pushL('Resultado antes dos impostos', LAIR, { cls: 'res', calc: !LAIR0, cod: 'LAIR', tip: { titulo: `Resultado antes dos impostos · ${per}`, formula: 'Resultado operacional ± resultado financeiro', conta: RO != null && RF ? `${fmtSin(RO)} + ${fmtSin(RF.v)} = ${fmtSin(LAIR)}` : '' } });
+  pushL('(−) IRPJ e CSLL', IR && -IR.v, { tip: IR && tipComp(`Impostos sobre o lucro · ${per}`, IR.contas.map(([n, v]) => [n, -v]), -IR.v) });
+  if (LL) pushL('Lucro líquido', LL.v, { cls: 'tot', cod: 'LL', tip: { titulo: `Lucro líquido · ${per}`, formula: LAIR != null && IR ? 'Resultado antes dos impostos − IRPJ e CSLL' : 'Valor informado', conta: LAIR != null && IR ? `${fmtSin(LAIR)} − ${fmtR(IR.v)} = ${fmtSin(LAIR - IR.v)}` : fmtSin(LL.v), nota: LAIR != null && IR && Math.abs(LAIR - IR.v - LL.v) > 1 ? `O lucro informado (${fmtSin(LL.v)}) inclui outras linhas, como operações descontinuadas.` : '' } });
+  // DFC
+  const dfc = state.caso.dfc && state.caso.dfc.length ? Object.fromEntries(state.caso.dfc.map(l => [l.cod, { ...l, val: l.v[k] }])) : null;
+  return { per, ativo, passivo, AT, PT, dre, LL: LL && LL.v, LAIR, RO, dfc };
+}
+const ROT_DFC = [
+  ['DFC.LUC', null, ''], ['DFC.DEP', 'Depreciação e amortização', ''], ['DFC.VCG', 'Variação do capital de giro e outros', ''],
+  ['DFC.OP', 'Caixa das atividades operacionais', 'res'], ['DFC.CAPEX', 'CAPEX (imobilizado e intangível)', ''], ['DFC.INV', 'Caixa das atividades de investimento', 'res'],
+  ['DFC.EMP', 'Empréstimos (captações − pagamentos)', ''], ['DFC.DIV', 'Dividendos e JCP pagos', ''], ['DFC.FIN', 'Caixa das atividades de financiamento', 'res'],
+  ['DFC.CAMB', 'Variação cambial', ''], ['DFC.VAR', 'Resultado de caixa (aumento ou redução)', 'res'], ['DFC.INI', 'Saldo inicial', ''], ['DFC.FIM', 'Saldo final', 'tot']
+];
+function renderMapa() {
+  const el = $('#p-mapa'); const per = state.caso.periodos;
+  if (state.mapaK == null || state.mapaK >= per.length) state.mapaK = per.length - 1;
+  const k = state.mapaK; const d = estruturaDados(k);
+  let h = `<div class="barra-acoes"><div class="seletor" role="group" aria-label="Exercício">${per.map((p, i) => `<button type="button" data-mapa-k="${i}" aria-pressed="${i === k}">${esc(p)}</button>`).join('')}</div><span class="nota">Valores ${state.caso.preset && state.caso.preset.startsWith('cvm') ? 'em R$ mil' : 'como informados'}. Os números coloridos mostram onde as demonstrações se conectam.</span></div>`;
+  // ligações
+  const caixa = somaCod('AC.DISP', k);
+  const dfcLuc = d.dfc && d.dfc['DFC.LUC'] && d.dfc['DFC.LUC'].val;
+  const igual = (a, b) => a != null && b != null && Math.abs(a - b) <= 1;
+  let inicioDFC = null;
+  if (dfcLuc != null) inicioDFC = igual(dfcLuc, d.LL) ? 'LL' : igual(dfcLuc, d.LAIR) ? 'LAIR' : igual(dfcLuc, d.RO) ? 'RO' : null;
+  // BP
+  const ladoHTML = (titulo, grupos, total, rotTotal) => `<div><div class="col-cab">${titulo}</div>${grupos.map(gr =>
+    linhaEst(gr.titulo, gr.tot, { cls: 'grupo', ancora: gr.ancora, lig: gr.lig, tip: gr.tipTot }) +
+    gr.linhas.map(l => linhaEst(l.nome, l.v, { ancora: l.c === 'AC.DISP' ? 'caixa' : '', lig: l.c === 'AC.DISP' && d.dfc ? [3] : [], tip: l.tip })).join('')).join('')}
+    ${linhaEst(rotTotal, total, { cls: 'tot', tip: tipComp(`${rotTotal} · ${d.per}`, grupos.map(gr => [gr.titulo, gr.tot]), total) })}</div>`;
+  const bp = `<div class="cartao" id="c-bp"><div class="cartao-cab"><span>Balanço patrimonial</span><span>${esc(d.per)}</span></div><div class="bp-colunas">${ladoHTML('Ativo', d.ativo, d.AT, 'Total do ativo')}${ladoHTML('Passivo + PL', d.passivo, d.PT, 'Total do passivo + PL')}</div></div>`;
+  const dre = `<div class="cartao" id="c-dre"><div class="cartao-cab"><span>DRE</span><span>${esc(d.per)}</span></div>${d.dre.length ? d.dre.map(l =>
+    linhaEst(l.nome, l.v, { cls: l.cls, calc: l.calc, sinal: true, tip: l.tip, ancora: [l.cod === 'LL' ? 'll' : '', l.cod === inicioDFC || (l.cod === 'LL' && !inicioDFC && d.dfc) ? 'ini-dfc' : ''].filter(Boolean).join(' '),
+      lig: [l.cod === 'LL' ? 1 : 0, d.dfc && (l.cod === inicioDFC || (l.cod === 'LL' && !inicioDFC)) ? 2 : 0].filter(Boolean) })).join('') : '<div class="vazio">A DRE não foi informada.</div>'}</div>`;
+  let dfcH;
+  if (d.dfc) {
+    dfcH = ROT_DFC.filter(([c]) => d.dfc[c] && d.dfc[c].val != null).map(([c, nome, cls]) => {
+      const l = d.dfc[c];
+      const nm = nome || `${l.nome} (ponto de partida)`;
+      return linhaEst(nm, l.val, { cls, sinal: true, ancora: c === 'DFC.LUC' ? 'dfc-luc' : c === 'DFC.FIM' ? 'dfc-fim' : '', lig: c === 'DFC.LUC' ? [2] : c === 'DFC.FIM' ? [3] : [],
+        tip: { titulo: `${nm} · ${d.per}`, formula: l.cd ? `Conta${l.cd.includes(',') ? 's' : ''} da CVM: ${l.cd.replace(/,/g, ' + ')}` : '', conta: fmtSin(l.val),
+          nota: c === 'DFC.VAR' ? 'Operacional + investimento + financiamento + variação cambial.' : c === 'DFC.FIM' ? 'Saldo inicial + resultado de caixa.' : c === 'DFC.VCG' ? 'Variações em clientes, estoques, fornecedores e outras contas, além de impostos e juros pagos.' : c === 'DFC.CAPEX' ? 'Soma das aquisições de imobilizado e intangível.' : '' } });
+    }).join('');
+  } else dfcH = `<div class="vazio">A demonstração dos fluxos de caixa não está disponível neste caso. Nas companhias da base da CVM ela vem junto com o balanço e a DRE.</div>`;
+  const dfc = `<div class="cartao" id="c-dfc"><div class="cartao-cab"><span>Fluxo de caixa</span><span>${esc(d.per)}</span></div>${dfcH}</div>`;
+  h += `<div class="est-grid" id="est-grid"><svg class="est-svg" id="est-svg" aria-hidden="true"></svg>${bp}${dre}${dfc}</div>`;
+  // explicações das ligações, com conferência
+  const lig = [];
+  const plAtual = somaGrupo('PL', k), plAnt = k > 0 ? somaGrupo('PL', k - 1) : null;
+  let t1 = `O lucro líquido da DRE (${fmtSin(d.LL)}) pertence aos sócios e vai para o patrimônio líquido: fica retido em reservas ou é distribuído como dividendos e JCP.`;
+  let c1 = '';
+  if (plAnt != null && d.LL != null) {
+    const dPL = plAtual - plAnt;
+    t1 += ` De ${per[k - 1]} para ${d.per}, o PL variou ${fmtSin(dPL)}; a diferença de ${fmtSin(dPL - d.LL)} em relação ao lucro vem de dividendos, aumentos de capital, ajustes de avaliação e outros movimentos do PL.`;
+    c1 = `<span class="chip neutro"${tip({ titulo: `Lucro × variação do PL · ${d.per}`, formula: 'Variação do PL = PL final − PL inicial', conta: `${fmtR(plAtual)} − ${fmtR(plAnt)} = ${fmtSin(dPL)}`, blocos: [{ itens: [['Lucro líquido do período', fmtSin(d.LL)], ['Outros movimentos do PL', fmtSin(dPL - d.LL)]], total: ['Variação do PL', fmtSin(dPL)] }], nota: d.dfc && d.dfc['DFC.DIV'] ? `Dividendos e JCP pagos no ano (DFC): ${fmtSin(d.dfc['DFC.DIV'].val)}.` : '' })}>lucro ${fmtSin(d.LL)} · ΔPL ${fmtSin(dPL)}</span>`;
+  }
+  lig.push([1, 'DRE e balanço: lucro líquido e patrimônio líquido', t1, c1]);
+  if (d.dfc) {
+    const nomeIni = d.dfc['DFC.LUC'] ? d.dfc['DFC.LUC'].nome : '';
+    const ondeDRE = { LL: 'ao lucro líquido', LAIR: 'ao resultado antes dos impostos', RO: 'ao resultado operacional' }[inicioDFC];
+    const t2 = dfcLuc == null ? 'A DFC desta empresa não informa o ponto de partida do método indireto.'
+      : ondeDRE ? `A DFC (método indireto) parte de “${nomeIni}”, igual ${ondeDRE} da DRE (${fmtSin(dfcLuc)}). Em seguida soma as despesas que não saem do caixa, como a depreciação, e ajusta as variações do capital de giro.`
+        : `A DFC parte de “${nomeIni}” (${fmtSin(dfcLuc)}), valor que não coincide com o lucro líquido nem com o resultado antes dos impostos da DRE.`;
+    lig.push([2, 'DRE e fluxo de caixa: o ponto de partida', t2, dfcLuc == null ? '' : `<span class="chip ${ondeDRE ? 'bom' : 'ruim'}">${ondeDRE ? '✓ confere' : 'não confere'}</span>`]);
+    const fim = d.dfc['DFC.FIM'] && d.dfc['DFC.FIM'].val;
+    const ok3 = igual(fim, caixa && caixa.v);
+    const t3 = fim == null ? 'A DFC não informa o saldo final de caixa.' : `O saldo final da DFC (${fmtSin(fim)}) é o caixa e equivalentes de caixa do balanço (${fmtSin(caixa && caixa.v)}).${ok3 ? '' : ' A diferença costuma vir de caixa classificado em outra conta, como ativos mantidos para venda.'}`;
+    lig.push([3, 'Fluxo de caixa e balanço: saldo final e caixa', t3, fim == null ? '' : `<span class="chip ${ok3 ? 'bom' : 'ruim'}"${tip({ titulo: `Conferência · ${d.per}`, formula: 'Saldo final da DFC = caixa e equivalentes do BP', blocos: [{ itens: [['Saldo final (DFC)', fmtSin(fim)], ['Caixa e equivalentes (BP)', fmtSin(caixa && caixa.v)]], total: ['Diferença', fmtSin(fim - (caixa ? caixa.v : 0))] }] })}>${ok3 ? '✓ confere' : 'diferença de ' + fmtSin(fim - (caixa ? caixa.v : 0))}</span>`]);
+  } else {
+    lig.push([2, 'DRE e fluxo de caixa', 'A DFC pelo método indireto começa pelo lucro da DRE e ajusta o que não passou pelo caixa. Este caso não tem DFC para conferir.', '']);
+    lig.push([3, 'Fluxo de caixa e balanço', 'O saldo final da DFC é sempre o caixa e equivalentes de caixa do balanço. Este caso não tem DFC para conferir.', '']);
+  }
+  const conf = Math.abs(d.AT - d.PT) <= 1;
+  h += `<section class="ligacoes"><div class="grupo-cab"><h2>Como as demonstrações se conectam</h2></div>${lig.map(([n, tit, txt, ch]) => `<div class="ligacao"><span class="lig l${n}">${n}</span><h3>${esc(tit)}</h3><p>${esc(txt)}</p>${ch}</div>`).join('')}
+    <p class="nota">Conferência do balanço em ${esc(d.per)}: ativo ${fmtR(d.AT)} e passivo + PL ${fmtR(d.PT)} ${conf ? '(fecham).' : `(diferença de ${fmtSin(d.AT - d.PT)}).`}</p></section>`;
+  el.innerHTML = h;
+  if (roMapa) { roMapa.disconnect(); roMapa.observe($('#est-grid')); $('#est-grid').querySelectorAll('.cartao').forEach(c => roMapa.observe(c)); }
+  if (!el.hidden) requestAnimationFrame(desenharLigacoes);
+}
+function desenharLigacoes() {
+  const grid = $('#est-grid'), svg = $('#est-svg');
+  if (!grid || !svg) return;
+  svg.innerHTML = '';
+  if (!window.matchMedia('(min-width: 900px)').matches || !grid.offsetWidth) return;
+  const G = grid.getBoundingClientRect();
+  const rel = r => ({ l: r.left - G.left, r: r.right - G.left, t: r.top - G.top, b: r.bottom - G.top, y: (r.top + r.bottom) / 2 - G.top });
+  const anc = nome => { const e = grid.querySelector(`[data-ancora~="${nome}"]`); return e ? rel(e.getBoundingClientRect()) : null; };
+  const card = id => { const e = $('#' + id); return e ? rel(e.getBoundingClientRect()) : null; };
+  const bp = card('c-bp'), dre = card('c-dre'), dfc = card('c-dfc');
+  svg.setAttribute('viewBox', `0 0 ${G.width} ${G.height}`);
+  svg.setAttribute('width', G.width); svg.setAttribute('height', G.height);
+  const cores = { 1: 'var(--lig1)', 2: 'var(--lig2)', 3: 'var(--lig3)' };
+  let h = '<defs>' + [1, 2, 3].map(n => `<marker id="seta${n}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="${cores[n]}"/></marker>`).join('') + '</defs>';
+  const caminho = (n, d) => { h += `<path d="${d}" fill="none" stroke="${cores[n]}" stroke-width="2.25" stroke-linejoin="round" marker-end="url(#seta${n})" marker-start="url(#seta${n})"/>`; };
+  const ll = anc('ll'), pl = anc('pl'), ini = anc('ini-dfc'), luc = anc('dfc-luc'), fim = anc('dfc-fim'), cx = anc('caixa');
+  if (ll && pl && bp && dre) { const xm = (bp.r + dre.l) / 2; caminho(1, `M${dre.l - 2} ${ll.y} H${xm} V${pl.y} H${bp.r + 2}`); }
+  if (ini && luc && dre && dfc) { const xr = Math.max(dre.r, dfc.r) + 18; caminho(2, `M${dre.r + 2} ${ini.y} H${xr} V${luc.y} H${dfc.r + 2}`); }
+  if (fim && cx && bp && dfc) {
+    const xm = (bp.r + dfc.l) / 2 - 10, yb = Math.max(bp.b, fim.y) + 18, xl = bp.l - 18;
+    caminho(3, `M${dfc.l - 2} ${fim.y} H${xm} V${yb} H${xl} V${cx.y} H${bp.l - 2}`);
+  }
+  svg.innerHTML = h;
+}
+let rTimer; const redesenhar = () => { clearTimeout(rTimer); rTimer = setTimeout(desenharLigacoes, 60); };
+window.addEventListener('resize', redesenhar);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(redesenhar);
+const roMapa = window.ResizeObserver ? new ResizeObserver(redesenhar) : null;
+$('#p-mapa').addEventListener('click', e => { const b = e.target.closest('[data-mapa-k]'); if (!b) return; state.mapaK = +b.dataset.mapaK; renderMapa(); });
+
+// ---------- Demonstrações no formato da CVM ----------
+const DFP_CACHE = {};
+const DEMOS = [['BPA', 'Balanço Patrimonial Ativo'], ['BPP', 'Balanço Patrimonial Passivo'], ['DRE', 'Demonstração do Resultado'], ['DFC', 'Demonstração dos Fluxos de Caixa']];
+const FORMULAS_DRE = { '3.03': ['3.01', '3.02'], '3.05': ['3.03', '3.04'], '3.07': ['3.05', '3.06'], '3.09': ['3.07', '3.08'], '3.11': ['3.09', '3.10'], '6.05': ['6.01', '6.02', '6.03', '6.04'], '6.05.02': ['6.05.01', '6.05'] };
+function linhasManuais(demo) {
+  const c = state.caso, n = c.periodos.length;
+  const soma = cs => Array.from({ length: n }, (_, i) => { const vs = cs.map(x => E.num(x.v[i])).filter(v => v != null); return vs.length ? vs.reduce((a, b) => a + b, 0) : null; });
+  const doGrupo = g => c.contas.filter(x => x.cod.startsWith(g + '.') && !x.detalhe);
+  if (demo === 'BPA' || demo === 'BPP') {
+    const raiz = demo === 'BPA' ? '1' : '2';
+    const grupos = demo === 'BPA' ? [['AC', 'Ativo Circulante'], ['ANC', 'Ativo Não Circulante']] : [['PC', 'Passivo Circulante'], ['PNC', 'Passivo Não Circulante'], ['PL', 'Patrimônio Líquido']];
+    const todas = grupos.flatMap(([g]) => doGrupo(g));
+    const L = [{ c: raiz, d: demo === 'BPA' ? 'Ativo Total' : 'Passivo Total', v: soma(todas) }];
+    grupos.forEach(([g, nome], gi) => {
+      const cg = `${raiz}.0${gi + 1}`;
+      L.push({ c: cg, d: nome, v: soma(doGrupo(g)) });
+      doGrupo(g).forEach((x, j) => L.push({ c: `${cg}.${String(j + 1).padStart(2, '0')}`, d: x.nome, v: x.v.map(E.num) }));
+    });
+    return L;
+  }
+  if (demo === 'DRE') {
+    return c.contas.filter(x => x.cod.startsWith('DRE.')).map((x, j) => {
+      const vs = x.v.map(E.num);
+      const jaNeg = vs.filter(v => v != null && v !== 0).every(v => v < 0);
+      return { c: `3.${String(j + 1).padStart(2, '0')}`, d: x.nome, v: ['DRE.CMV', 'DRE.DOP', 'DRE.IR'].includes(x.cod) && !jaNeg ? vs.map(v => v == null ? v : -v) : vs };
+    });
+  }
+  return null;
+}
+async function renderDemo() {
+  const el = $('#p-demo');
+  const c = state.caso; const ehCVM = !!(c.cd_cvm && c.sel);
+  const demo = state.demo || 'BPA';
+  let periodos = c.periodos.map((p, i) => ({ rot: p, i })), linhas = null, aviso = '';
+  if (ehCVM) {
+    try {
+      if (!DFP_CACHE[c.cd_cvm]) {
+        el.innerHTML = '<p class="nota">Carregando as demonstrações completas…</p>';
+        const r = await fetch(`${BASE_URL}dfp/${encodeURIComponent(c.cd_cvm)}.json`);
+        if (!r.ok) throw new Error(r.status);
+        DFP_CACHE[c.cd_cvm] = await r.json();
+      }
+      const comp = DFP_CACHE[c.cd_cvm];
+      const sel = []; for (let i = c.sel.de; i <= c.sel.ate; i++) sel.push(i);
+      linhas = (comp[demo] || []).map(l => ({ c: l.c, d: l.d, v: sel.map(i => l.v[i] == null ? null : l.v[i]) })).filter(l => l.v.some(v => v != null));
+      const datas = DOC && DOC.cd_cvm === c.cd_cvm ? sel.map(i => DOC.periodos[i]) : null;
+      periodos = sel.map((i, j) => ({ rot: c.periodos[j], i: j, data: datas && datas[j] && datas[j].data }));
+      if (c.preset === 'cvm-editado') aviso = 'Estes são os valores originais da CVM; as edições feitas na aba Dados não aparecem aqui.';
+    } catch (e) {
+      linhas = null; aviso = 'Não foi possível carregar as demonstrações completas desta companhia.';
+    }
+  } else {
+    linhas = linhasManuais(demo);
+    aviso = 'Caso digitado ou importado: os códigos das contas são gerados pelo sistema, na mesma estrutura da CVM.';
+  }
+  const fmtData = (d, dre) => { if (!d) return null; const [a, m, dd] = d.split('-'); return dre ? `01/01/${a} a ${dd}/${m}/${a}` : `${dd}/${m}/${a}`; };
+  const cols = [...periodos].reverse(); // como no RAD: o exercício mais recente primeiro
+  const ehFluxo = demo === 'DRE' || demo === 'DFC';
+  let h = `<div class="barra-acoes"><div class="seletor" role="group" aria-label="Demonstração">${DEMOS.map(([k, n]) => `<button type="button" data-demo="${k}" aria-pressed="${k === demo}">${k === 'BPA' ? 'BP Ativo' : k === 'BPP' ? 'BP Passivo' : k}</button>`).join('')}</div></div>`;
+  h += `<div class="demo-tit">${ehCVM ? (c.fonte && c.fonte.includes('individuais') ? 'DFs Consolidadas / Individuais' : 'DFs Consolidadas') + ' / ' : ''}${esc(DEMOS.find(x => x[0] === demo)[1])}${ehCVM ? ' (Reais Mil)' : ''}</div>`;
+  if (aviso) h += `<p class="nota">${esc(aviso)}</p>`;
+  if (!linhas || !linhas.length) {
+    h += `<p class="vazio">${demo === 'DFC' ? 'A demonstração dos fluxos de caixa não está disponível neste caso.' : 'Não há contas para mostrar.'}</p>`;
+    el.innerHTML = h; return;
+  }
+  const porCod = Object.fromEntries(linhas.map(l => [l.c, l]));
+  const filhos = cod => linhas.filter(l => l.c.startsWith(cod + '.') && l.c.split('.').length === cod.split('.').length + 1);
+  h += `<div class="rolagem"><table class="demo-tab"><thead><tr><th>Conta</th><th>Descrição</th>${cols.map(p => `<th class="n">${esc(fmtData(p.data, ehFluxo) || p.rot)}</th>`).join('')}</tr></thead><tbody>`;
+  for (const l of linhas) {
+    const nivel = l.c.split('.').length;
+    const fs = filhos(l.c);
+    const form = FORMULAS_DRE[l.c];
+    h += `<tr class="n${Math.min(nivel, 3)}"><td class="cod">${esc(l.c)}</td><td class="ds" style="padding-left:${12 + (nivel - 1) * 14}px">${esc(l.d)}</td>`;
+    h += cols.map(p => {
+      const v = l.v[p.i];
+      if (v == null) return '<td class="n"></td>';
+      let t = null;
+      if (fs.length) {
+        const itens = fs.filter(f => f.v[p.i] != null).map(f => [`${f.c} ${f.d}`, fmtN(f.v[p.i], Number.isInteger(f.v[p.i]) ? 0 : 2)]);
+        const s = fs.reduce((a, f) => a + (f.v[p.i] || 0), 0);
+        const ok = Math.abs(s - v) <= 1;
+        t = { titulo: `${l.c} ${l.d} · ${p.rot}`, formula: 'Soma das subcontas', blocos: [{ itens, total: ['Soma', fmtN(s, Number.isInteger(s) ? 0 : 2)] }], nota: ok ? 'Confere com o valor informado.' : `Diferença de ${fmtN(v - s, 0)} para o valor informado: a empresa não detalhou toda a conta.` };
+      } else if (form && form.every(f => porCod[f])) {
+        const partes = form.map(f => porCod[f]).map(f => [f.c + ' ' + f.d, f.v[p.i] || 0]);
+        const s = partes.reduce((a, x) => a + x[1], 0);
+        t = { titulo: `${l.c} ${l.d} · ${p.rot}`, formula: form.join(' + '), blocos: [{ itens: partes.map(([n, x]) => [n, fmtN(x, 0)]), total: ['Resultado', fmtN(s, 0)] }], nota: Math.abs(s - v) <= 1 ? 'Confere com o valor informado.' : `Diferença de ${fmtN(v - s, 0)} para o valor informado.` };
+      }
+      return `<td class="n"><span${t ? tip(t) : ''}>${fmtN(v, Number.isInteger(v) ? 0 : 2)}</span></td>`;
+    }).join('') + '</tr>';
+  }
+  h += '</tbody></table></div>';
+  el.innerHTML = h;
+}
+$('#p-demo').addEventListener('click', e => { const b = e.target.closest('[data-demo]'); if (!b) return; state.demo = b.dataset.demo; renderDemo(); });
+
 // ---------- recálculo ----------
 function recalcular() {
   R = E.analisar(state.caso, state.params);
@@ -187,16 +568,17 @@ function recalcular() {
   const origem = state.caso.preset === 'cvm' ? 'dados da CVM, R$ mil' : state.caso.preset === 'cia-grega' ? 'exemplo da Profa. Isabel' : state.caso.preset === 'weg' ? 'digitado do PDF, R$ mil' : 'dados próprios';
   $('#meta-caso').textContent = `${p.length} ${p.length === 1 ? 'período' : 'períodos'} (${p[0]}${p.length > 1 ? ' a ' + p[p.length - 1] : ''}) · ${origem} · ${state.caso.contas.length} contas · parâmetros ${padrao ? 'no padrão da Profa. Isabel' : 'personalizados'}${state.editado ? ' · dados editados' : ''}`;
   if (state.caso.preset !== 'cvm') $('#periodos').hidden = true;
-  renderAnalise(); renderEstrutura(); renderTeste();
+  TIPS.clear(); esconderDica();
+  renderAnalise(); renderMapa(); renderEstrutura(); renderTeste(); renderDemo();
   salvar();
 }
 
 // ---------- Análise ----------
 function chip(i) {
   if (!i.t) return '<span class="chip neutro">sem comparação</span>';
-  if (i.t.est) return `<span class="chip neutro">→ estável</span>`;
+  if (i.t.est) return `<span class="chip neutro"${tip(tipEvolucao(i))}>→ estável</span>`;
   const seta = i.t.d > 0 ? '↑' : '↓';
-  return `<span class="chip ${i.t.melhora ? 'bom' : 'ruim'}">${seta} ${esc(i.delta.replace(/^[+−]/, ''))} · ${i.t.melhora ? 'melhora' : 'piora'}</span>`;
+  return `<span class="chip ${i.t.melhora ? 'bom' : 'ruim'}"${tip(tipEvolucao(i))}>${seta} ${esc(i.delta.replace(/^[+−]/, ''))} · ${i.t.melhora ? 'melhora' : 'piora'}</span>`;
 }
 const nomeIndice = i => { const n = i.nome.replace(/^(o|a) /, ''); return n[0].toUpperCase() + n.slice(1); };
 function renderAnalise() {
@@ -212,12 +594,12 @@ function renderAnalise() {
     h += `<section class="grupo" id="g-${g.id}"><div class="grupo-cab"><h2>${esc(g.titulo)}</h2><span class="regra">${its.length} índices</span></div>`;
     h += `<p class="sintese">${esc(g.sintese)}</p>`;
     h += `<div class="rolagem"><table><thead><tr><th>Índice</th>${per.map(p => `<th class="n">${esc(p)}</th>`).join('')}<th>Evolução</th></tr></thead><tbody>`;
-    for (const i of its) h += `<tr><td class="sigla"><a href="#ind-${i.id}">${i.id}</a></td>${i.fmt.map(v => `<td class="n">${esc(v)}</td>`).join('')}<td>${chip(i)}</td></tr>`;
+    for (const i of its) h += `<tr><td class="sigla"><a href="#ind-${i.id}">${i.id}</a></td>${i.fmt.map((v, k) => `<td class="n"><span${tip(tipIndice(i, k))}>${esc(v)}</span></td>`).join('')}<td>${chip(i)}</td></tr>`;
     h += `</tbody></table></div>`;
     for (const i of its) {
       h += `<article class="indice" id="ind-${i.id}"><div class="ind-cab"><span class="sigla">${i.id}</span><h3>${esc(nomeIndice(i))}</h3>${chip(i)}</div>`;
       h += `<div class="formula">${esc(i.formula)} · ${i.dir > 0 ? 'quanto maior, melhor' : 'quanto menor, melhor'}</div>`;
-      h += `<div class="calculos">${i.calc.map((c, k) => `<span><b>${esc(per[k])}</b> ${c ? esc(c) : 'não calculável'}</span>`).join('')}</div>`;
+      h += `<div class="calculos">${i.calc.map((c, k) => `<span><b>${esc(per[k])}</b> <span${tip(tipIndice(i, k))}>${c ? esc(c) : 'não calculável'}</span></span>`).join('')}</div>`;
       h += `<p class="leitura">${esc(i.texto)}</p>`;
       h += `<div class="ind-acoes"><button class="btn mini" type="button" data-copiar="${i.id}">Copiar parágrafo</button></div></article>`;
     }
@@ -256,22 +638,37 @@ function documentoWord() {
 // ---------- AV e AH ----------
 function renderEstrutura() {
   const el = $('#p-estrutura'); const per = state.caso.periodos;
+  const AT = R.estrutura.totais.AT.v;
+  const RL = per.map((_, k) => { const r = somaCod('DRE.RL', k); return r ? r.v : null; });
+  const pct = v => v == null ? '—' : fmtN(v, 2) + '%';
   let h = `<p class="nota">Análise vertical: contas do balanço sobre o ativo total; contas da DRE sobre a receita líquida. Análise horizontal: base 100 em ${esc(per[0])}, e variação em relação ao período anterior.</p>`;
   for (const g of R.estrutura.grupos) {
+    const ehDRE = g.g === 'DRE';
+    const base = ehDRE ? RL : AT, nomeBase = ehDRE ? 'receita líquida' : 'ativo total';
     h += `<section class="grupo"><div class="grupo-cab"><h2>${esc(g.titulo)}</h2></div>`;
     if (g.rep) h += `<p class="leitura">${esc(g.rep)}</p>`;
     const linhas = [...g.linhas, ...(g.total ? [g.total] : [])];
     h += `<div class="rolagem"><table><thead><tr><th>Conta</th>${per.map(p => `<th class="n">${esc(p)}</th>`).join('')}${per.map(p => `<th class="n">AV ${esc(p)}</th>`).join('')}${per.slice(1).map(p => `<th class="n">AH ${esc(p)}</th>`).join('')}${per.slice(1).map(p => `<th class="n">Var. ${esc(p)}</th>`).join('')}</tr></thead><tbody>`;
-    linhas.forEach((l, k) => {
-      const tot = g.total && k === linhas.length - 1;
-      h += `<tr class="${tot ? 'total' : ''} ${l.detalhe ? 'detalhe' : ''}"><td>${esc(l.nome)}</td>${l.v.map(v => `<td class="n">${v == null ? '—' : fmtMoeda(v)}</td>`).join('')}${l.av.map(v => `<td class="n">${v == null ? '—' : fmtN(v, 2) + '%'}</td>`).join('')}${l.ah.slice(1).map(v => `<td class="n">${v == null ? '—' : fmtN(v, 2)}</td>`).join('')}${l.var.slice(1).map(v => `<td class="n">${v == null ? '—' : (v >= 0 ? '+' : '−') + fmtN(Math.abs(v), 2) + '%'}</td>`).join('')}</tr>`;
+    linhas.forEach((l, j) => {
+      const tot = g.total && j === linhas.length - 1;
+      const cel = (txt, t) => `<td class="n">${txt === '—' || !t ? txt : `<span${tip(t)}>${txt}</span>`}</td>`;
+      const vals = l.v.map((v, k) => {
+        if (v == null) return cel('—');
+        if (!tot) return cel(fmtMoeda(v));
+        const itens = g.linhas.filter(x => !x.detalhe && x.v[k] != null).map(x => [x.nome, fmtMoeda(x.v[k])]);
+        return cel(fmtMoeda(v), { titulo: `${l.nome} · ${per[k]}`, formula: 'Soma das contas do grupo', blocos: [{ itens, total: ['Total', fmtMoeda(v)] }] });
+      }).join('');
+      const av = l.av.map((v, k) => cel(pct(v), v == null ? null : { titulo: `Análise vertical · ${l.nome} · ${per[k]}`, formula: `AV = conta ÷ ${nomeBase} × 100`, conta: `${fmtMoeda(l.v[k])} ÷ ${fmtMoeda(base[k])} × 100 = ${pct(v)}`, nota: `Mostra quanto ${l.nome.toLowerCase()} representa ${ehDRE ? 'da receita líquida' : 'do ativo total'} em ${per[k]}.` })).join('');
+      const ah = l.ah.slice(1).map((v, j2) => { const k = j2 + 1; return cel(v == null ? '—' : fmtN(v, 2), v == null ? null : { titulo: `Análise horizontal · ${l.nome} · ${per[k]}`, formula: `AH = valor de ${per[k]} ÷ valor de ${per[0]} × 100`, conta: `${fmtMoeda(l.v[k])} ÷ ${fmtMoeda(l.v[0])} × 100 = ${fmtN(v, 2)}`, nota: `Acima de 100, a conta cresceu em relação a ${per[0]}; abaixo de 100, diminuiu.` }); }).join('');
+      const vr = l.var.slice(1).map((v, j2) => { const k = j2 + 1; const txt = v == null ? '—' : (v >= 0 ? '+' : '−') + fmtN(Math.abs(v), 2) + '%'; return cel(txt, v == null ? null : { titulo: `Variação · ${l.nome} · ${per[k - 1]} → ${per[k]}`, formula: '(valor atual ÷ valor anterior − 1) × 100', conta: `(${fmtMoeda(l.v[k])} ÷ ${fmtMoeda(l.v[k - 1])} − 1) × 100 = ${txt}` }); }).join('');
+      h += `<tr class="${tot ? 'total' : ''} ${l.detalhe ? 'detalhe' : ''}"><td>${esc(l.nome)}</td>${vals}${av}${ah}${vr}</tr>`;
     });
     h += `</tbody></table></div></section>`;
   }
   const T = R.estrutura.totais;
   h += `<div class="rolagem"><table><thead><tr><th>Conferência</th>${per.map(p => `<th class="n">${esc(p)}</th>`).join('')}</tr></thead><tbody>
-    <tr><td>${T.AT.nome}</td>${T.AT.v.map(v => `<td class="n">${v == null ? '—' : fmtMoeda(v)}</td>`).join('')}</tr>
-    <tr><td>${T.PT.nome}</td>${T.PT.v.map(v => `<td class="n">${v == null ? '—' : fmtMoeda(v)}</td>`).join('')}</tr></tbody></table></div>`;
+    <tr><td>${T.AT.nome}</td>${T.AT.v.map((v, k) => `<td class="n">${v == null ? '—' : `<span${tip({ titulo: `Ativo total · ${per[k]}`, formula: 'Ativo circulante + ativo não circulante', conta: `${fmtMoeda(somaGrupo('AC', k) || 0)} + ${fmtMoeda(somaGrupo('ANC', k) || 0)} = ${fmtMoeda(v)}` })}>${fmtMoeda(v)}</span>`}</td>`).join('')}</tr>
+    <tr><td>${T.PT.nome}</td>${T.PT.v.map((v, k) => `<td class="n">${v == null ? '—' : `<span${tip({ titulo: `Passivo + PL · ${per[k]}`, formula: 'Passivo circulante + passivo não circulante + patrimônio líquido', conta: `${fmtMoeda(somaGrupo('PC', k) || 0)} + ${fmtMoeda(somaGrupo('PNC', k) || 0)} + ${fmtMoeda(somaGrupo('PL', k) || 0)} = ${fmtMoeda(v)}` })}>${fmtMoeda(v)}</span>`}</td>`).join('')}</tr></tbody></table></div>`;
   el.innerHTML = h;
 }
 
@@ -497,10 +894,12 @@ function renderTeste() {
 // ---------- abas e cópia ----------
 function irAba(nome) {
   state.aba = nome;
-  for (const a of ['analise', 'estrutura', 'dados', 'params', 'teste']) {
+  esconderDica();
+  for (const a of ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params', 'teste']) {
     $('#t-' + a).setAttribute('aria-selected', String(a === nome));
     $('#p-' + a).hidden = a !== nome;
   }
+  if (nome === 'mapa') requestAnimationFrame(desenharLigacoes);
   salvar();
 }
 document.querySelector('nav.abas').addEventListener('click', e => { const b = e.target.closest('.aba'); if (b) irAba(b.id.slice(2)); });

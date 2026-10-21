@@ -64,5 +64,24 @@ t('Um único período não quebra o texto', () => {
   assert.ok(R.by.LC.texto.includes('o valor em 2025 foi de 1,55'), R.by.LC.texto);
 });
 
+t('Base da CVM: resumo da DFC acompanha o intervalo de anos', () => {
+  const doc = require(path.join(__dirname, 'fixtures/saida/cia/5410.json'));
+  const caso = E.casoDaBase(doc, 1, 2);
+  const fim = caso.dfc.find(l => l.cod === 'DFC.FIM').v;
+  const caixa = caso.contas.filter(c => c.cod === 'AC.DISP').reduce((a, c) => a.map((x, i) => x + c.v[i]), [0, 0]);
+  assert.deepStrictEqual(fim, caixa);
+  assert.deepStrictEqual(caso.sel, { de: 1, ate: 2 });
+});
+
+t('Detalhe do cálculo: numerador e denominador somam o índice', () => {
+  const doc = require(path.join(__dirname, 'fixtures/saida/cia/5410.json'));
+  const R = E.analisar(E.casoDaBase(doc, 0, 2), {});
+  const d = R.by.LC.detalhe[2];
+  assert.strictEqual(d.num.contas.reduce((a, c) => a + c.k * c.v, 0), d.N);
+  assert.strictEqual(Math.round(d.N / d.D * 100) / 100, 1.55);
+  assert.strictEqual(R.by.PMPC.detalhe[1].den.compras.total, 27960761);
+  assert.strictEqual(R.by.CF.detalhe[2].partes.length, 3);
+});
+
 if (falhas) { console.log(`\n${falhas} teste(s) falharam`); process.exit(1); }
 console.log('\nMotor: todos os testes passaram.');

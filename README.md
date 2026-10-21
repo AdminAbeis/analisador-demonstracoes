@@ -10,6 +10,18 @@ Página web que analisa o balanço patrimonial e a DRE de companhias abertas com
 
 A pessoa escolhe a empresa numa lista com todas as companhias abertas da CVM e define o intervalo de anos. Também dá para digitar ou importar os dados de qualquer empresa.
 
+Abas da página:
+
+| Aba | O que mostra |
+|---|---|
+| Análise | Os 17 índices, a evolução de cada um, o parágrafo interpretativo e a conclusão integrada |
+| Estruturas | Balanço, DRE e fluxo de caixa lado a lado, com as três ligações entre eles conferidas (lucro → PL, ponto de partida da DFC, saldo final → caixa) |
+| Demonstrações | Balanço ativo e passivo, DRE e DFC conta a conta, com os códigos da CVM, no formato do RAD |
+| AV e AH | Análise vertical e horizontal de todas as contas |
+| Dados, Parâmetros, Teste | Edição dos dados, regras configuráveis e gabarito da Cia Grega |
+
+Em todas as abas, os valores sublinhados mostram a fórmula e o cálculo. No computador, basta passar o mouse; no celular, o toque abre um painel na parte de baixo da tela.
+
 Tudo é gratuito: os dados vêm do Portal de Dados Abertos da CVM, e o site roda no GitHub Pages.
 
 ## Como funciona
@@ -17,9 +29,10 @@ Tudo é gratuito: os dados vêm do Portal de Dados Abertos da CVM, e o site roda
 ```
 CVM (dados.cvm.gov.br)                     GitHub Actions, toda segunda-feira
   dfp_cia_aberta_2010.zip … 2025.zip  ──►  pipeline/cvm.py
-  cad_cia_aberta.csv (setor)                 · lê balanço e DRE (consolidado; individual quando não há)
+  cad_cia_aberta.csv (setor)                 · lê balanço, DRE e DFC (consolidado; individual quando não há)
   fca_cia_aberta_AAAA.zip (WEGE3 etc.)       · classifica as contas no plano do sistema
-                                             · gera data/empresas.json e data/cia/<código>.json
+                                             · gera data/empresas.json, data/cia/<código>.json
+                                               (análise) e data/dfp/<código>.json (demonstrações completas)
                                                          │
                                                          ▼
                                      GitHub Pages: index.html + app.js + engine.js
@@ -33,7 +46,7 @@ CVM (dados.cvm.gov.br)                     GitHub Actions, toda segunda-feira
 | `exemplos.js` | Casos prontos: Cia Grega (gabarito da professora) e WEG digitada dos PDFs |
 | `pipeline/cvm.py` | Rotina que baixa e processa os arquivos da CVM (só biblioteca padrão do Python) |
 | `pipeline/test_cvm.py` | Teste da rotina com arquivos montados no layout da CVM |
-| `tests/engine.test.js` | Testes do motor (gabarito da Cia Grega, coerência CVM × WEG digitada) |
+| `tests/engine.test.js` | Testes do motor (gabarito da Cia Grega, coerência CVM × WEG digitada, DFC e detalhe dos cálculos) |
 | `.github/workflows/publicar.yml` | Roda os testes, atualiza os dados e publica o site |
 
 ## Colocar no ar (uma vez)
@@ -89,6 +102,17 @@ As DFPs da CVM usam códigos fixos para empresas comerciais, industriais e de se
 **Diferenças.** Se a soma das contas de um grupo não bater com o total informado, a diferença vira a linha "Outras contas do grupo".
 
 **Sinais.** Custos, despesas e impostos são gravados com sinal positivo.
+
+**Fluxo de caixa.** A rotina lê a DFC pelo método indireto (ou pelo direto, quando é o único publicado) e guarda as linhas-chave usando as contas fixas da CVM:
+
+| CVM | Linha |
+|---|---|
+| 6.01.01 (primeira subconta) | Ponto de partida: lucro líquido ou lucro antes dos impostos, conforme a empresa |
+| 6.01 / 6.02 / 6.03 | Caixa das atividades operacionais, de investimento e de financiamento |
+| 6.04 | Variação cambial sobre o caixa |
+| 6.05.01 / 6.05.02 | Saldo inicial e saldo final de caixa |
+
+As linhas de depreciação, CAPEX, empréstimos e dividendos são identificadas pelo nome das subcontas.
 
 ## Limites conhecidos
 

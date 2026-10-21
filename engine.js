@@ -294,6 +294,14 @@ const Engine = (() => {
     });
   }
 
+  function comprasDetalhe(caso, n, i) {
+    const est = serieLado(n, lado(caso, ['AC.EST']), false);
+    const cmv = serieLado(n, lado(caso, ['DRE.CMV']), false);
+    const ov = num(((caso.extras && caso.extras.compras) || [])[i]);
+    if (ov != null) return { informado: ov };
+    const ei = i === 0 ? num(caso.extras && caso.extras.estoqueInicial) : est[i - 1];
+    return { cmv: cmv[i], ei, ef: est[i], total: cmv[i] - ei + est[i] };
+  }
   function calcRazao(d, caso, P, n) {
     const media = P.saldos === 'medio' && !!d.media;
     const mN = media && !ehDRE(d.num.sels);
@@ -304,7 +312,17 @@ const Engine = (() => {
     else { mD = media && !ehDRE(d.den.sels); eD = lado(caso, d.den.sels); Dn = serieLado(n, eD, mD); }
     const mult = d.mult === 'dias' ? P.dias : d.mult;
     const vals = N.map((x, i) => (x == null || Dn[i] == null || Dn[i] === 0) ? null : x / Dn[i] * mult);
-    return { d, eN, eD, N, D: Dn, mN, mD, mult, vals };
+    // composição de numerador e denominador em cada período (para mostrar o cálculo)
+    const comp = (entries, media, i) => entries.map(e => {
+      const v = acc(e.c, i, media);
+      return v == null ? null : { nome: e.c.nome, v, k: e.k, media, v0: media ? e.c.v[i - 1] : null, v1: media ? e.c.v[i] : null };
+    }).filter(Boolean);
+    const detalhe = vals.map((v, i) => {
+      if (v == null) return null;
+      const den = d.den.compras ? { compras: comprasDetalhe(caso, n, i) } : { contas: comp(eD, mD, i) };
+      return { N: N[i], D: Dn[i], num: { contas: comp(eN, mN, i) }, den };
+    });
+    return { d, eN, eD, N, D: Dn, mN, mD, mult, vals, detalhe };
   }
   function calcSoma(d, res, n) {
     const vals = [];
@@ -575,8 +593,11 @@ const Engine = (() => {
       } else {
         calc = r.vals.map((v, i) => v == null ? null : d.parts.map(([id, k], j) => `${j ? (k > 0 ? ' + ' : ' − ') : ''}${fmtN(res[id].vals[i], 0)}`).join('') + ` = ${fmtN(v, 0)}`);
       }
+      const detalhe = d.tipo === 'razao'
+        ? r.detalhe.map(x => x && { ...x, rotN: d.num.rot, rotD: d.den.rot, mult: r.mult })
+        : r.vals.map((v, i) => v == null ? null : { partes: d.parts.map(([id, k]) => ({ id, nome: res[id].d.nome, v: res[id].vals[i], k })) });
       return {
-        id: d.id, grupo: d.grupo, nome: d.nome, formula: d.formula, unid: d.unid, dir: d.dir,
+        id: d.id, grupo: d.grupo, nome: d.nome, formula: d.formula, unid: d.unid, dir: d.dir, detalhe,
         vals: r.vals, fmt: r.vals.map(v => fmtVal(d, v, P)), calc, texto: tx.paragrafo, t: tx.t,
         delta: tx.t ? (tx.t.d > 0 ? '+' : tx.t.d < 0 ? '−' : '') + fmtDelta(d, tx.t.d, P) : ''
       };
@@ -649,11 +670,14 @@ const Engine = (() => {
       preset: 'cvm', cd_cvm: doc.cd_cvm, empresa: doc.empresa, sinais: 'despesa_positiva',
       fonte: doc.fonte + (ind.length ? ` Em ${lista(ind)} a empresa não publicou demonstrações consolidadas; foram usadas as individuais.` : ''),
       periodos: sel.map(i => doc.periodos[i].rotulo),
-      extras: { estoqueInicial: ei, compras: [] }, contas
+      extras: { estoqueInicial: ei, compras: [] }, contas,
+      dfc: (doc.dfc || []).map(l => ({ cod: l.cod, nome: l.nome, cd: l.cd, v: sel.map(i => l.v[i] == null ? null : l.v[i]) }))
+        .filter(l => l.v.some(x => x != null)),
+      sel: { de, ate }
     };
   }
 
-  return { analisar, casoDaBase, CODIGOS, GRUPOS_BP, PADRAO, fmtN, num };
+  return { analisar, casoDaBase, CODIGOS, GRUPOS_BP, PADRAO, fmtN, fmtVal: (unid, v, P) => fmtVal({ unid }, v, { ...PADRAO, ...(P || {}) }), num };
 })();
 if (typeof module !== 'undefined') module.exports = Engine;
 if (typeof window !== 'undefined') window.Engine = Engine;

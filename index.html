@@ -15,6 +15,7 @@
   --accent: #0D6656; --accent-soft: #DCEDE8; --accent-ink: #FFFFFF;
   --good: #2B7537; --good-soft: #E0EFE2; --bad: #A93D29; --bad-soft: #F6E2DC; --flat: #66716B; --flat-soft: #E7EBE8;
   --warn-soft: #FBF1DC; --warn: #8A5A00;
+  --lig1: #C2611A; --lig2: #2F6FC4; --lig3: #2E8B4E; --tip-bg: #17201C; --tip-ink: #F2F4F1; --tip-muted: #B9C4BE; --tip-rule: #3A4741;
   --f-display: 'IBM Plex Sans Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
   --f-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --f-num: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
@@ -24,13 +25,13 @@
   --paper: #101513; --surface: #171E1B; --ink: #E2E9E5; --muted: #95A39C; --rule: #28322E; --rule-strong: #43514A;
   --accent: #5BBEA8; --accent-soft: #1B3430; --accent-ink: #0B1210;
   --good: #73C482; --good-soft: #1A2F1F; --bad: #E58870; --bad-soft: #38211C; --flat: #9BA6A0; --flat-soft: #242C29;
-  --warn-soft: #33290F; --warn: #E2B45A; color-scheme: dark;
+  --warn-soft: #33290F; --warn: #E2B45A; --lig1: #F0954F; --lig2: #79A9F2; --lig3: #6CC48C; --tip-bg: #E2E9E5; --tip-ink: #101513; --tip-muted: #4E5C55; --tip-rule: #BFCAC4; color-scheme: dark;
 } }
 :root[data-theme="dark"] {
   --paper: #101513; --surface: #171E1B; --ink: #E2E9E5; --muted: #95A39C; --rule: #28322E; --rule-strong: #43514A;
   --accent: #5BBEA8; --accent-soft: #1B3430; --accent-ink: #0B1210;
   --good: #73C482; --good-soft: #1A2F1F; --bad: #E58870; --bad-soft: #38211C; --flat: #9BA6A0; --flat-soft: #242C29;
-  --warn-soft: #33290F; --warn: #E2B45A; color-scheme: dark;
+  --warn-soft: #33290F; --warn: #E2B45A; --lig1: #F0954F; --lig2: #79A9F2; --lig3: #6CC48C; --tip-bg: #E2E9E5; --tip-ink: #101513; --tip-muted: #4E5C55; --tip-rule: #BFCAC4; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -151,8 +152,71 @@ legend { font-family: var(--f-display); font-weight: 600; font-size: 16px; paddi
 footer.rodape { padding-block: 0 40px; color: var(--muted); font-size: 12.5px; }
 footer.rodape a { color: var(--accent); }
 
+/* dicas de cálculo */
+[data-tip] { text-decoration: underline dotted var(--rule-strong); text-decoration-thickness: 1.5px; text-underline-offset: 3px; cursor: help; border-radius: 3px; }
+[data-tip]:hover, [data-tip][aria-describedby] { background: var(--accent-soft); text-decoration-color: var(--accent); }
+.sublinhado { text-decoration: underline dotted var(--rule-strong); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.dica-aviso { margin-top: -2px; }
+.dica { position: fixed; z-index: 30; max-width: min(380px, calc(100vw - 16px)); background: var(--tip-bg); color: var(--tip-ink); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.45; box-shadow: 0 6px 24px rgba(0,0,0,.25); pointer-events: auto; }
+.dica.folha { left: 0 !important; right: 0; top: auto !important; bottom: 0; max-width: none; border-radius: 14px 14px 0 0; padding: 16px 16px calc(18px + env(safe-area-inset-bottom, 0px)); max-height: 62vh; overflow-y: auto; font-size: 14px; }
+.dica-fechar { float: right; font: inherit; font-size: 22px; line-height: 1; background: none; border: 0; color: var(--tip-ink); cursor: pointer; padding: 0 4px 4px 12px; }
+.tip-tit { font-weight: 600; margin-bottom: 4px; }
+.tip-f { font-family: var(--f-num); font-size: 12px; color: var(--tip-muted); }
+.tip-c { font-family: var(--f-num); font-size: 12.5px; margin-top: 4px; overflow-wrap: anywhere; }
+.tip-b { margin-top: 8px; }
+.tip-bt { font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--tip-muted); margin-bottom: 2px; }
+.tip-b table { font-size: 12.5px; width: 100%; }
+.tip-b td { padding: 2px 0; border: 0; vertical-align: top; }
+.tip-b td.n { padding-left: 12px; font-family: var(--f-num); white-space: nowrap; }
+.tip-b tr.tip-tot td { border-top: 1px solid var(--tip-rule); padding-top: 4px; font-weight: 600; }
+.tip-mais { color: var(--tip-muted); font-style: italic; }
+.tip-n { margin-top: 8px; color: var(--tip-muted); font-size: 12.5px; }
+
+/* estruturas (BP, DRE e DFC conectados) */
+.seletor { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.seletor button { font: inherit; font-size: 13.5px; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.seletor button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.est-grid { position: relative; display: grid; gap: 20px; }
+.est-svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.cartao { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; min-width: 0; position: relative; z-index: 1; }
+.cartao-cab { background: var(--ink); color: var(--paper); font-family: var(--f-display); font-weight: 700; font-size: 15px; letter-spacing: .04em; text-transform: uppercase; padding: 8px 12px; display: flex; justify-content: space-between; gap: 8px; }
+.cartao-cab span:last-child { font-family: var(--f-num); font-weight: 400; font-size: 12px; letter-spacing: 0; text-transform: none; opacity: .8; align-self: center; }
+.bp-colunas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.bp-colunas > div + div { border-left: 1px solid var(--rule); }
+.col-cab { background: var(--accent-soft); color: var(--ink); font-family: var(--f-display); font-weight: 600; font-size: 13.5px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 12px; text-align: center; }
+.lin { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 4px 12px; font-size: 13.5px; align-items: baseline; border-top: 1px solid var(--rule); }
+.lin .v { font-family: var(--f-num); font-variant-numeric: tabular-nums; font-size: 12.5px; white-space: nowrap; }
+.lin.grupo { background: var(--paper); font-weight: 600; }
+.lin.res { font-weight: 600; }
+.lin.tot { background: var(--paper); font-weight: 700; border-top: 2px solid var(--ink); }
+.lin .nm { min-width: 0; overflow-wrap: anywhere; display: flex; gap: 6px; align-items: baseline; }
+.lin .calc { font-size: 11px; color: var(--muted); font-weight: 400; }
+.lig { display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; color: #fff; font-family: var(--f-num); font-size: 11px; font-weight: 600; line-height: 1; }
+.lig.l1 { background: var(--lig1); } .lig.l2 { background: var(--lig2); } .lig.l3 { background: var(--lig3); }
+.vazio { padding: 16px 12px; font-size: 13.5px; color: var(--muted); }
+.ligacoes { display: grid; gap: 12px; }
+.ligacao { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; }
+.ligacao h3 { font-size: 16px; }
+.ligacao p { grid-column: 2; font-size: 14px; max-width: 70ch; }
+.ligacao .chip { justify-self: start; grid-column: 2; }
+@media (min-width: 900px) {
+  .est-grid { width: min(1180px, calc(100vw - 48px)); margin-left: calc((100% - min(1180px, calc(100vw - 48px))) / 2); grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); grid-template-areas: "bp dre" "bp dfc"; column-gap: 64px; row-gap: 28px; padding: 0 30px 36px; align-items: start; }
+  #c-bp { grid-area: bp; } #c-dre { grid-area: dre; } #c-dfc { grid-area: dfc; }
+}
+@media (max-width: 899px) { .est-svg { display: none; } }
+@media (max-width: 520px) { .bp-colunas { grid-template-columns: minmax(0, 1fr); } .bp-colunas > div + div { border-left: 0; border-top: 2px solid var(--rule); } }
+
+/* demonstrações no formato da CVM */
+.demo-tab { font-size: 13.5px; }
+.demo-tab td.cod { font-family: var(--f-num); font-size: 12px; white-space: nowrap; color: var(--muted); }
+.demo-tab tr.n1 td, .demo-tab tr.n2 td { font-weight: 600; }
+.demo-tab tr.n1 td { background: var(--paper); }
+.demo-tab td.ds { min-width: 260px; }
+.demo-tit { font-family: var(--f-display); font-weight: 600; font-size: 17px; }
+
 @media print {
-  nav.abas, .empresa-barra, .linha-ferramentas, .barra-acoes, .ind-acoes, .toast, footer.rodape, #p-estrutura, #p-dados, #p-params, #p-teste { display: none !important; }
+  nav.abas, .empresa-barra, .linha-ferramentas, .barra-acoes, .ind-acoes, .toast, .dica, .dica-aviso, footer.rodape, #p-mapa, #p-demo, #p-estrutura, #p-dados, #p-params, #p-teste { display: none !important; }
+  [data-tip] { text-decoration: none; }
   #p-analise { display: grid !important; }
   body { background: #fff; color: #000; font-size: 11pt; }
   .rolagem { border: 0; overflow: visible; }
@@ -186,6 +250,7 @@ footer.rodape a { color: var(--accent); }
     </div>
     <p class="status-base" id="status-base">Carregando a lista de companhias…</p>
   </section>
+  <p class="nota dica-aviso">Passe o mouse ou toque nos valores <span class="sublinhado">sublinhados</span> para ver a fórmula e o cálculo.</p>
 
   <div class="linha-ferramentas">
     <label class="btn arquivo" for="arq-importar">Importar CSV ou JSON<input type="file" id="arq-importar" accept=".csv,.json,.txt,text/csv,application/json"></label>
@@ -201,6 +266,8 @@ footer.rodape a { color: var(--accent); }
 <nav class="abas" aria-label="Seções">
   <div class="wrap" role="tablist">
     <button class="aba" role="tab" id="t-analise" aria-controls="p-analise" aria-selected="true">Análise</button>
+    <button class="aba" role="tab" id="t-mapa" aria-controls="p-mapa" aria-selected="false">Estruturas</button>
+    <button class="aba" role="tab" id="t-demo" aria-controls="p-demo" aria-selected="false">Demonstrações</button>
     <button class="aba" role="tab" id="t-estrutura" aria-controls="p-estrutura" aria-selected="false">AV e AH</button>
     <button class="aba" role="tab" id="t-dados" aria-controls="p-dados" aria-selected="false">Dados</button>
     <button class="aba" role="tab" id="t-params" aria-controls="p-params" aria-selected="false">Parâmetros</button>
@@ -210,6 +277,8 @@ footer.rodape a { color: var(--accent); }
 
 <main class="wrap">
   <section class="painel" id="p-analise" role="tabpanel" aria-labelledby="t-analise"></section>
+  <section class="painel" id="p-mapa" role="tabpanel" aria-labelledby="t-mapa" hidden></section>
+  <section class="painel" id="p-demo" role="tabpanel" aria-labelledby="t-demo" hidden></section>
   <section class="painel" id="p-estrutura" role="tabpanel" aria-labelledby="t-estrutura" hidden></section>
   <section class="painel" id="p-dados" role="tabpanel" aria-labelledby="t-dados" hidden></section>
   <section class="painel" id="p-params" role="tabpanel" aria-labelledby="t-params" hidden></section>
@@ -218,6 +287,7 @@ footer.rodape a { color: var(--accent); }
 
 <footer class="rodape wrap" id="rodape"></footer>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="dica" id="dica" role="tooltip" hidden></div>
 
 <script src="engine.js"></script>
 <script src="exemplos.js"></script>
