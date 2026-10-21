@@ -20,7 +20,9 @@ Abas da página:
 | AV e AH | Análise vertical e horizontal de todas as contas |
 | Dados, Parâmetros, Teste | Edição dos dados, regras configuráveis e gabarito da Cia Grega |
 
-Em todas as abas, os valores sublinhados mostram a fórmula e o cálculo. No computador, basta passar o mouse; no celular, o toque abre um painel na parte de baixo da tela.
+Em todas as abas, os valores sublinhados mostram a fórmula e o cálculo. No computador, passar o mouse mostra um resumo e clicar abre a lista completa das contas; no celular, o toque abre um painel na parte de baixo da tela.
+
+A página abre com a WEG (últimos três exercícios) na primeira visita e depois lembra a última empresa consultada. Os botões **Imprimir / PDF**, **Word** e **CSV** exportam a aba que estiver aberta.
 
 Tudo é gratuito: os dados vêm do Portal de Dados Abertos da CVM, e o site roda no GitHub Pages.
 
@@ -43,9 +45,10 @@ CVM (dados.cvm.gov.br)                     GitHub Actions, toda segunda-feira
 |---|---|
 | `index.html`, `app.js` | Interface: busca de empresas, períodos, abas Análise / AV e AH / Dados / Parâmetros / Teste, exportação |
 | `engine.js` | Motor: índices, decomposição, seleção de contas, textos, AV/AH e conclusão integrada |
-| `exemplos.js` | Casos prontos: Cia Grega (gabarito da professora) e WEG digitada dos PDFs |
+| `exemplos.js` | Gabarito da Cia Grega (exemplo da professora), usado na aba Teste |
 | `pipeline/cvm.py` | Rotina que baixa e processa os arquivos da CVM (só biblioteca padrão do Python) |
 | `pipeline/test_cvm.py` | Teste da rotina com arquivos montados no layout da CVM |
+| `tests/weg-digitada.json` | WEG digitada a partir dos PDFs, usada para conferir a rotina da CVM |
 | `tests/engine.test.js` | Testes do motor (gabarito da Cia Grega, coerência CVM × WEG digitada, DFC e detalhe dos cálculos) |
 | `.github/workflows/publicar.yml` | Roda os testes, atualiza os dados e publica o site |
 

@@ -5,7 +5,7 @@ const path = require('path');
 const E = require('../engine.js');
 global.window = {};
 require('../exemplos.js');
-const EX = global.window.EXEMPLOS;
+const EX = { ...global.window.EXEMPLOS, weg: require('./weg-digitada.json') };
 let falhas = 0;
 const t = (nome, fn) => { try { fn(); console.log('ok  ', nome); } catch (e) { falhas++; console.log('FALHOU', nome, '\n     ', e.message); } };
 

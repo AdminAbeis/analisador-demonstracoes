@@ -6,7 +6,8 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtN = E.fmtN;
 const clone = o => JSON.parse(JSON.stringify(o));
-const CHAVE = 'analisador-dc-v2';
+const CHAVE = 'analisador-dc-v3';
+const CD_INICIAL = '5410'; // WEG: empresa aberta na primeira visita
 const BASE_URL = 'data/';
 // Fora do Claude (GitHub Pages, servidor local ou arquivo aberto no computador) os downloads funcionam.
 const PODE_EXPORTAR = /(^|\.)github\.io$/.test(location.hostname) || /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.protocol === 'file:';
@@ -19,6 +20,7 @@ const ESPERADO = {
 };
 const NOMES_GRUPO = Object.fromEntries(E.GRUPOS_BP);
 
+function casoBrancoInicial() { return casoBranco(); }
 function casoBranco() {
   return {
     preset: 'branco', empresa: '', fonte: '', periodos: ['Ano 1', 'Ano 2', 'Ano 3'], extras: { estoqueInicial: '', compras: [] },
@@ -27,7 +29,8 @@ function casoBranco() {
   };
 }
 
-let state = { caso: clone(EX['cia-grega']), params: { ...E.PADRAO }, aba: 'analise', editado: false, cvm: null };
+let state = { caso: { ...casoBrancoInicial(), empresa: 'Carregando…' }, params: { ...E.PADRAO }, aba: 'analise', editado: false, cvm: null };
+let restaurado = false;
 let R = null;
 let BASE = null;          // empresas.json
 let DOC = null;           // arquivo da empresa escolhida na base CVM
@@ -41,6 +44,7 @@ function carregar() {
     if (s && s.caso && Array.isArray(s.caso.contas)) {
       state.caso = s.caso; state.params = { ...E.PADRAO, ...(s.params || {}) }; state.editado = !!s.editado;
       state.cvm = s.cvm || null; if (s.aba) state.aba = s.aba;
+      restaurado = true;
     }
   } catch (e) { }
 }
@@ -99,10 +103,15 @@ async function carregarBase() {
       : `${n.toLocaleString('pt-BR')} companhias abertas com balanço e DRE na CVM (${faixaAnos()}), atualizado em ${data}.`;
     $('#rodape').innerHTML = `Dados: <a href="https://dados.cvm.gov.br/dataset/cia_aberta-doc-dfp" target="_blank" rel="noopener">CVM, Portal de Dados Abertos</a> (licença ODbL). Os textos são gerados por regras e devem ser revisados antes de entregar.`;
     if (state.cvm && state.caso.preset === 'cvm') abrirEmpresa(state.cvm.c, state.cvm.de, state.cvm.ate, true);
+    else if (!restaurado) {
+      const ini = BASE.empresas.find(e => e.c === CD_INICIAL && !e.fin) || BASE.empresas.find(e => !e.fin && e.a.length);
+      if (ini) abrirEmpresa(ini.c, null, null, true);
+    }
   } catch (e) {
     BASE = null;
     $('#busca').disabled = true;
-    st.textContent = 'A lista de companhias da CVM não está disponível nesta página. Use os exemplos, importe um arquivo ou digite os dados na aba Dados.';
+    st.textContent = 'A lista de companhias da CVM não está disponível nesta página. Importe um arquivo ou digite os dados na aba Dados.';
+    if (!restaurado) { state.caso = casoBranco(); recalcular(); renderDados(); }
   }
 }
 function faixaAnos() {
@@ -185,20 +194,44 @@ const fmtR = v => v == null ? '—' : fmtN(v, Number.isInteger(Math.round(v * 10
 const fmtSin = v => v == null ? '—' : v < 0 ? `(${fmtR(-v)})` : fmtR(v);
 const semArt = s => s.replace(/^(o|a) /, '');
 const cap1 = s => s ? s[0].toUpperCase() + s.slice(1) : s;
-function tipHTML(o) {
+// Ao passar o mouse a dica mostra um resumo (subtotais por grupo do balanço ou as maiores contas);
+// ao clicar ou tocar ela mostra a lista completa, com rolagem quando for longa.
+const LIMITE_RESUMO = 8;
+function resumirItens(itens) {
+  const num = itens.every(x => typeof x[2] === 'number');
+  const grupos = [...new Set(itens.map(x => x[3]).filter(Boolean))];
+  if (num && grupos.length >= 2 && itens.every(x => x[3])) {
+    return grupos.map(g => { const its = itens.filter(x => x[3] === g); return [`${g} (${its.length} ${its.length > 1 ? 'contas' : 'conta'})`, fmtSin(its.reduce((a, x) => a + x[2], 0))]; });
+  }
+  if (num) {
+    const ord = [...itens].sort((a, b) => Math.abs(b[2]) - Math.abs(a[2]));
+    const resto = ord.slice(6);
+    return [...ord.slice(0, 6), [`Demais ${resto.length} contas`, fmtSin(resto.reduce((a, x) => a + x[2], 0))]];
+  }
+  return [...itens.slice(0, LIMITE_RESUMO), [`e mais ${itens.length - LIMITE_RESUMO} itens`, '']];
+}
+function tipHTML(o, completo) {
   let h = `<div class="tip-tit">${esc(o.titulo)}</div>`;
   if (o.formula) h += `<div class="tip-f">${esc(o.formula)}</div>`;
   if (o.conta) h += `<div class="tip-c">${esc(o.conta)}</div>`;
+  let resumido = 0;
   for (const b of (o.blocos || [])) {
     if (!b) continue;
+    let itens = b.itens;
+    if (!completo && itens.length > LIMITE_RESUMO) { resumido = Math.max(resumido, itens.length); itens = resumirItens(itens); }
     h += `<div class="tip-b">${b.titulo ? `<div class="tip-bt">${esc(b.titulo)}</div>` : ''}<table>`;
-    const MAX = 12;
-    h += b.itens.slice(0, MAX).map(([n, v]) => `<tr><td>${esc(n)}</td><td class="n">${esc(v)}</td></tr>`).join('');
-    if (b.itens.length > MAX) h += `<tr><td colspan="2" class="tip-mais">e mais ${b.itens.length - MAX} itens</td></tr>`;
+    const grupos = [...new Set(itens.map(x => x[3]).filter(Boolean))];
+    let gAtual = null;
+    h += itens.map(([n, v, , g]) => {
+      let cab = '';
+      if (completo && grupos.length >= 2 && g && g !== gAtual) { gAtual = g; cab = `<tr class="tip-grp"><td colspan="2">${esc(g)}</td></tr>`; }
+      return cab + `<tr><td${v === '' ? ' class="tip-mais"' : ''}>${esc(n)}</td><td class="n">${esc(v)}</td></tr>`;
+    }).join('');
     if (b.total) h += `<tr class="tip-tot"><td>${esc(b.total[0])}</td><td class="n">${esc(b.total[1])}</td></tr>`;
     h += `</table></div>`;
   }
   if (o.nota) h += `<div class="tip-n">${esc(o.nota)}</div>`;
+  if (resumido) h += `<div class="tip-mais-dica">Resumo. Clique no valor para ver a lista completa (${resumido} contas).</div>`;
   return h;
 }
 const dica = $('#dica'); let dicaAlvo = null, dicaFixa = false;
@@ -206,15 +239,18 @@ const estreito = () => window.matchMedia('(max-width: 700px)').matches;
 function mostrarDica(el, fixa, folha) {
   const o = TIPS.get(el.dataset.tip); if (!o) return;
   if (dicaAlvo && dicaAlvo !== el) dicaAlvo.removeAttribute('aria-describedby');
-  dica.innerHTML = (folha ? '<button class="dica-fechar" type="button" aria-label="Fechar">×</button>' : '') + tipHTML(o);
+  dica.innerHTML = (fixa ? '<button class="dica-fechar" type="button" aria-label="Fechar">×</button>' : '') + tipHTML(o, fixa);
   dica.classList.toggle('folha', !!folha);
+  dica.classList.toggle('fixa', !!fixa);
+  dica.scrollTop = 0;
   dica.style.left = '0px'; dica.style.top = '0px';
   dica.hidden = false; dicaAlvo = el; dicaFixa = fixa;
   el.setAttribute('aria-describedby', 'dica');
   if (!folha) {
-    const r = el.getBoundingClientRect(), w = dica.offsetWidth, hh = dica.offsetHeight;
+    const r = el.getBoundingClientRect(), w = dica.offsetWidth, hh = dica.offsetHeight, H = window.innerHeight;
     let x = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
-    let y = r.bottom + 8; if (y + hh > window.innerHeight - 8) y = Math.max(8, r.top - hh - 8);
+    let y = r.bottom + 8;
+    if (y + hh > H - 8) y = r.top - hh - 8 >= 8 ? r.top - hh - 8 : Math.max(8, H - hh - 8);
     dica.style.left = x + 'px'; dica.style.top = y + 'px';
   }
 }
@@ -250,11 +286,12 @@ document.addEventListener('keydown', e => {
   const el = e.target.closest && e.target.closest('[data-tip]');
   if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); mostrarDica(el, true, estreito()); }
 });
-window.addEventListener('scroll', () => { if (!dica.hidden && !dica.classList.contains('folha')) esconderDica(); }, { passive: true, capture: true });
+window.addEventListener('scroll', e => { if (e.target === dica || dica.contains(e.target)) return; if (!dica.hidden && !dica.classList.contains('folha')) esconderDica(); }, { passive: true, capture: true });
 
+const GRUPO_ROT = { AC: 'Ativo circulante', ANC: 'Ativo não circulante', PC: 'Passivo circulante', PNC: 'Passivo não circulante', PL: 'Patrimônio líquido', DRE: 'DRE' };
 function blocoLado(titulo, lado, total) {
   if (!lado || !lado.contas) return null;
-  const itens = lado.contas.map(c => [(c.k < 0 ? '(−) ' : '') + c.nome, c.media ? `(${fmtR(c.v0)} + ${fmtR(c.v1)}) ÷ 2 = ${fmtR(c.v)}` : fmtR(c.v)]);
+  const itens = lado.contas.filter(c => c.v !== 0).map(c => [(c.k < 0 ? '(−) ' : '') + c.nome, c.media ? `(${fmtR(c.v0)} + ${fmtR(c.v1)}) ÷ 2 = ${fmtR(c.v)}` : fmtR(c.v), c.k * c.v, GRUPO_ROT[(c.cod || '').split('.')[0]]]);
   return { titulo, itens, total: lado.contas.length > 1 ? ['Total', fmtR(total)] : null };
 }
 function tipIndice(i, k) {
@@ -323,7 +360,7 @@ function linhaEst(nome, v, opts = {}) {
   return `<div class="${cls}"${opts.ancora ? ` data-ancora="${opts.ancora}"` : ''}><span class="nm">${badge}<span>${esc(nome)}${opts.calc ? ' <span class="calc">(calculado)</span>' : ''}</span></span><span class="v"${opts.tip ? tip(opts.tip) : ''}>${opts.sinal ? fmtSin(v) : fmtR(v)}</span></div>`;
 }
 function tipComp(titulo, itens, total, nota) {
-  return { titulo, blocos: [{ itens: itens.map(([n, v]) => [n, fmtSin(v)]), total: itens.length > 1 ? ['Total', fmtSin(total)] : null }], nota };
+  return { titulo, blocos: [{ itens: itens.map(([n, v]) => [n, fmtSin(v), v]), total: itens.length > 1 ? ['Total', fmtSin(total)] : null }], nota };
 }
 function estruturaDados(k) {
   const per = state.caso.periodos[k];
@@ -493,15 +530,13 @@ function linhasManuais(demo) {
   }
   return null;
 }
-async function renderDemo() {
-  const el = $('#p-demo');
+async function dadosDemo(demo, aoCarregar) {
   const c = state.caso; const ehCVM = !!(c.cd_cvm && c.sel);
-  const demo = state.demo || 'BPA';
   let periodos = c.periodos.map((p, i) => ({ rot: p, i })), linhas = null, aviso = '';
   if (ehCVM) {
     try {
       if (!DFP_CACHE[c.cd_cvm]) {
-        el.innerHTML = '<p class="nota">Carregando as demonstrações completas…</p>';
+        if (aoCarregar) aoCarregar();
         const r = await fetch(`${BASE_URL}dfp/${encodeURIComponent(c.cd_cvm)}.json`);
         if (!r.ok) throw new Error(r.status);
         DFP_CACHE[c.cd_cvm] = await r.json();
@@ -519,11 +554,18 @@ async function renderDemo() {
     linhas = linhasManuais(demo);
     aviso = 'Caso digitado ou importado: os códigos das contas são gerados pelo sistema, na mesma estrutura da CVM.';
   }
-  const fmtData = (d, dre) => { if (!d) return null; const [a, m, dd] = d.split('-'); return dre ? `01/01/${a} a ${dd}/${m}/${a}` : `${dd}/${m}/${a}`; };
-  const cols = [...periodos].reverse(); // como no RAD: o exercício mais recente primeiro
   const ehFluxo = demo === 'DRE' || demo === 'DFC';
+  const fmtData = (d) => { if (!d) return null; const [a, m, dd] = d.split('-'); return ehFluxo ? `01/01/${a} a ${dd}/${m}/${a}` : `${dd}/${m}/${a}`; };
+  const cols = [...periodos].reverse().map(p => ({ ...p, cab: fmtData(p.data) || p.rot })); // como no RAD: o exercício mais recente primeiro
+  const titulo = `${ehCVM ? (c.fonte && c.fonte.includes('individuais') ? 'DFs Consolidadas / Individuais' : 'DFs Consolidadas') + ' / ' : ''}${DEMOS.find(x => x[0] === demo)[1]}${ehCVM ? ' (Reais Mil)' : ''}`;
+  return { linhas, cols, aviso, titulo, ehCVM };
+}
+async function renderDemo() {
+  const el = $('#p-demo');
+  const demo = state.demo || 'BPA';
+  const { linhas, cols, aviso, titulo } = await dadosDemo(demo, () => { el.innerHTML = '<p class="nota">Carregando as demonstrações completas…</p>'; });
   let h = `<div class="barra-acoes"><div class="seletor" role="group" aria-label="Demonstração">${DEMOS.map(([k, n]) => `<button type="button" data-demo="${k}" aria-pressed="${k === demo}">${k === 'BPA' ? 'BP Ativo' : k === 'BPP' ? 'BP Passivo' : k}</button>`).join('')}</div></div>`;
-  h += `<div class="demo-tit">${ehCVM ? (c.fonte && c.fonte.includes('individuais') ? 'DFs Consolidadas / Individuais' : 'DFs Consolidadas') + ' / ' : ''}${esc(DEMOS.find(x => x[0] === demo)[1])}${ehCVM ? ' (Reais Mil)' : ''}</div>`;
+  h += `<div class="demo-tit">${esc(titulo)}</div>`;
   if (aviso) h += `<p class="nota">${esc(aviso)}</p>`;
   if (!linhas || !linhas.length) {
     h += `<p class="vazio">${demo === 'DFC' ? 'A demonstração dos fluxos de caixa não está disponível neste caso.' : 'Não há contas para mostrar.'}</p>`;
@@ -531,7 +573,7 @@ async function renderDemo() {
   }
   const porCod = Object.fromEntries(linhas.map(l => [l.c, l]));
   const filhos = cod => linhas.filter(l => l.c.startsWith(cod + '.') && l.c.split('.').length === cod.split('.').length + 1);
-  h += `<div class="rolagem"><table class="demo-tab"><thead><tr><th>Conta</th><th>Descrição</th>${cols.map(p => `<th class="n">${esc(fmtData(p.data, ehFluxo) || p.rot)}</th>`).join('')}</tr></thead><tbody>`;
+  h += `<div class="rolagem"><table class="demo-tab"><thead><tr><th>Conta</th><th>Descrição</th>${cols.map(p => `<th class="n">${esc(p.cab)}</th>`).join('')}</tr></thead><tbody>`;
   for (const l of linhas) {
     const nivel = l.c.split('.').length;
     const fs = filhos(l.c);
@@ -542,7 +584,7 @@ async function renderDemo() {
       if (v == null) return '<td class="n"></td>';
       let t = null;
       if (fs.length) {
-        const itens = fs.filter(f => f.v[p.i] != null).map(f => [`${f.c} ${f.d}`, fmtN(f.v[p.i], Number.isInteger(f.v[p.i]) ? 0 : 2)]);
+        const itens = fs.filter(f => f.v[p.i] != null).map(f => [`${f.c} ${f.d}`, fmtN(f.v[p.i], Number.isInteger(f.v[p.i]) ? 0 : 2), f.v[p.i]]);
         const s = fs.reduce((a, f) => a + (f.v[p.i] || 0), 0);
         const ok = Math.abs(s - v) <= 1;
         t = { titulo: `${l.c} ${l.d} · ${p.rot}`, formula: 'Soma das subcontas', blocos: [{ itens, total: ['Soma', fmtN(s, Number.isInteger(s) ? 0 : 2)] }], nota: ok ? 'Confere com o valor informado.' : `Diferença de ${fmtN(v - s, 0)} para o valor informado: a empresa não detalhou toda a conta.` };
@@ -565,7 +607,7 @@ function recalcular() {
   $('#titulo-empresa').textContent = state.caso.empresa || 'Empresa sem nome';
   const p = state.caso.periodos;
   const padrao = JSON.stringify(state.params) === JSON.stringify(E.PADRAO);
-  const origem = state.caso.preset === 'cvm' ? 'dados da CVM, R$ mil' : state.caso.preset === 'cia-grega' ? 'exemplo da Profa. Isabel' : state.caso.preset === 'weg' ? 'digitado do PDF, R$ mil' : 'dados próprios';
+  const origem = state.caso.preset === 'cvm' ? 'dados da CVM, R$ mil' : state.caso.preset === 'cia-grega' ? 'gabarito da Profa. Isabel' : 'dados próprios';
   $('#meta-caso').textContent = `${p.length} ${p.length === 1 ? 'período' : 'períodos'} (${p[0]}${p.length > 1 ? ' a ' + p[p.length - 1] : ''}) · ${origem} · ${state.caso.contas.length} contas · parâmetros ${padrao ? 'no padrão da Profa. Isabel' : 'personalizados'}${state.editado ? ' · dados editados' : ''}`;
   if (state.caso.preset !== 'cvm') $('#periodos').hidden = true;
   TIPS.clear(); esconderDica();
@@ -655,7 +697,7 @@ function renderEstrutura() {
       const vals = l.v.map((v, k) => {
         if (v == null) return cel('—');
         if (!tot) return cel(fmtMoeda(v));
-        const itens = g.linhas.filter(x => !x.detalhe && x.v[k] != null).map(x => [x.nome, fmtMoeda(x.v[k])]);
+        const itens = g.linhas.filter(x => !x.detalhe && x.v[k] != null).map(x => [x.nome, fmtMoeda(x.v[k]), x.v[k]]);
         return cel(fmtMoeda(v), { titulo: `${l.nome} · ${per[k]}`, formula: 'Soma das contas do grupo', blocos: [{ itens, total: ['Total', fmtMoeda(v)] }] });
       }).join('');
       const av = l.av.map((v, k) => cel(pct(v), v == null ? null : { titulo: `Análise vertical · ${l.nome} · ${per[k]}`, formula: `AV = conta ÷ ${nomeBase} × 100`, conta: `${fmtMoeda(l.v[k])} ÷ ${fmtMoeda(base[k])} × 100 = ${pct(v)}`, nota: `Mostra quanto ${l.nome.toLowerCase()} representa ${ehDRE ? 'da receita líquida' : 'do ativo total'} em ${per[k]}.` })).join('');
@@ -750,7 +792,7 @@ function paraCSV() {
   return L.join('\n');
 }
 function lerArquivo(txt) {
-  txt = (txt || '').replace(/^﻿/, '').trim();
+  txt = (txt || '').replace(/^\ufeff/, '').trim();
   if (!txt) return null;
   if (txt[0] === '{') {
     try {
@@ -783,7 +825,7 @@ function lerArquivo(txt) {
 }
 function usarCaso(caso, editadoFlag) {
   state.caso = caso; state.editado = !!editadoFlag; state.cvm = null; DOC = null;
-  $('#periodos').hidden = true; $('#sel-exemplo').value = '';
+  $('#periodos').hidden = true;
   recalcular(); renderDados(); renderParams();
 }
 $('#arq-importar').addEventListener('change', e => {
@@ -796,17 +838,108 @@ $('#arq-importar').addEventListener('change', e => {
   };
   rd.readAsText(f, 'utf-8');
 });
-$('#btn-copiar-csv').addEventListener('click', () => copiar(paraCSV(), 'CSV'));
-$('#btn-word').addEventListener('click', () => baixar(`analise-${slug(state.caso.empresa)}.doc`, '﻿' + documentoWord(), 'application/msword'));
-$('#btn-pdf').addEventListener('click', () => { irAba('analise'); setTimeout(() => window.print(), 50); });
-$('#btn-json').addEventListener('click', () => baixar(`caso-${slug(state.caso.empresa)}.json`, JSON.stringify({ caso: state.caso, params: state.params }, null, 1), 'application/json'));
-$('#exportar').hidden = !PODE_EXPORTAR;
-$('#sel-exemplo').addEventListener('change', e => {
-  const v = e.target.value; if (!v) return;
-  usarCaso(v === 'branco' ? casoBranco() : clone(EX[v]), false);
-  e.target.value = v;
-  if (v === 'branco') irAba('dados');
+// ---------- exportação da aba aberta (PDF, Word, CSV) ----------
+const NOME_ABA = { analise: 'Análise', mapa: 'Estruturas', demo: 'Demonstrações', estrutura: 'AV e AH', dados: 'Dados', params: 'Parâmetros', teste: 'Teste' };
+const numCSV = v => v == null || v === '' ? '' : String(Math.round(Number(v) * 100) / 100).replace('.', ',');
+const linhaCSV = arr => arr.map(x => { const t = String(x == null ? '' : x); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(';');
+async function csvDaAba() {
+  const per = state.caso.periodos, L = [];
+  const aba = state.aba;
+  if (aba === 'analise') {
+    L.push(linhaCSV(['Grupo', 'Sigla', 'Índice', 'Fórmula', ...per, 'Evolução']));
+    for (const g of R.grupos) for (const id of g.ids) { const i = R.by[id]; L.push(linhaCSV([g.titulo, i.id, nomeIndice(i), i.formula, ...i.vals.map(numCSV), i.t ? (i.t.est ? 'estável' : i.t.melhora ? 'melhora' : 'piora') : ''])); }
+  } else if (aba === 'mapa') {
+    const ds = per.map((_, k) => estruturaDados(k));
+    const ult = ds[ds.length - 1];
+    L.push(linhaCSV(['Demonstração', 'Grupo', 'Linha', ...per]));
+    const valorBP = (d, gr, nome) => { const lado = [...d.ativo, ...d.passivo].find(x => x.titulo === gr); if (!lado) return null; if (!nome) return lado.tot; const l = lado.linhas.find(x => x.nome === nome); return l ? l.v : null; };
+    for (const gr of [...ult.ativo, ...ult.passivo]) {
+      L.push(linhaCSV(['Balanço patrimonial', gr.titulo, gr.titulo + ' (total)', ...ds.map(d => numCSV(valorBP(d, gr.titulo)))]));
+      for (const l of gr.linhas) L.push(linhaCSV(['Balanço patrimonial', gr.titulo, l.nome, ...ds.map(d => numCSV(valorBP(d, gr.titulo, l.nome)))]));
+    }
+    L.push(linhaCSV(['Balanço patrimonial', '', 'Total do ativo', ...ds.map(d => numCSV(d.AT))]));
+    L.push(linhaCSV(['Balanço patrimonial', '', 'Total do passivo + PL', ...ds.map(d => numCSV(d.PT))]));
+    for (const l of ult.dre) L.push(linhaCSV(['DRE', '', l.nome, ...ds.map(d => { const x = d.dre.find(y => y.nome === l.nome); return numCSV(x ? x.v : null); })]));
+    for (const [c, nome] of ROT_DFC) { if (!ult.dfc || !ult.dfc[c]) continue; L.push(linhaCSV(['Fluxo de caixa', '', nome || ult.dfc[c].nome, ...ds.map(d => numCSV(d.dfc && d.dfc[c] ? d.dfc[c].val : null))])); }
+  } else if (aba === 'demo') {
+    let cab = false;
+    for (const [k, nome] of DEMOS) {
+      const d = await dadosDemo(k);
+      if (!d.linhas || !d.linhas.length) continue;
+      if (!cab) { L.push(linhaCSV(['Demonstração', 'Conta', 'Descrição', ...d.cols.map(p => p.cab)])); cab = true; }
+      for (const l of d.linhas) L.push(linhaCSV([nome, l.c, l.d, ...d.cols.map(p => numCSV(l.v[p.i]))]));
+    }
+  } else if (aba === 'estrutura') {
+    L.push(linhaCSV(['Grupo', 'Conta', ...per, ...per.map(p => 'AV ' + p), ...per.slice(1).map(p => 'AH ' + p), ...per.slice(1).map(p => 'Var. % ' + p)]));
+    for (const g of R.estrutura.grupos) for (const l of [...g.linhas, ...(g.total ? [g.total] : [])])
+      L.push(linhaCSV([g.titulo, l.nome, ...l.v.map(numCSV), ...l.av.map(numCSV), ...l.ah.slice(1).map(numCSV), ...l.var.slice(1).map(numCSV)]));
+  } else return { texto: paraCSV(), nome: `dados-${slug(state.caso.empresa)}.csv`, rotulo: 'Dados do caso' };
+  return { texto: L.join('\n'), nome: `${slug(NOME_ABA[aba])}-${slug(state.caso.empresa)}.csv`, rotulo: 'Tabela' };
+}
+const CSS_WORD = 'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4}h1{font-size:18pt}h2{font-size:14pt;margin-top:18pt}h3{font-size:12pt;margin-bottom:2pt}table{border-collapse:collapse;margin:6pt 0}td,th{border:1px solid #999;padding:3pt 6pt;font-size:9.5pt}th{background:#e8ece9}.n{text-align:right}.f{color:#555;font-size:9.5pt}p{text-align:justify}.g td{font-weight:bold;background:#f2f4f1}';
+const docWord = (titulo, corpo) => `<html><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${CSS_WORD}</style></head><body><h1>${esc(titulo)}</h1>${state.caso.fonte ? `<p class="f">Fonte: ${esc(state.caso.fonte)}</p>` : ''}${corpo}</body></html>`;
+async function wordDaAba() {
+  const emp = state.caso.empresa || 'Empresa', aba = state.aba;
+  if (aba === 'analise') return documentoWord();
+  if (aba === 'mapa') {
+    const d = estruturaDados(state.mapaK != null ? state.mapaK : state.caso.periodos.length - 1);
+    const tab = (titulo, linhas) => `<h2>${esc(titulo)}</h2><table>${linhas.map(([n, v, g]) => `<tr${g ? ' class="g"' : ''}><td>${esc(n)}</td><td class="n">${fmtSin(v)}</td></tr>`).join('')}</table>`;
+    const bp = lado => lado.flatMap(gr => [[gr.titulo, gr.tot, true], ...gr.linhas.map(l => [l.nome, l.v])]);
+    let c = `<p>Exercício de ${esc(d.per)}${state.caso.preset && state.caso.preset.startsWith('cvm') ? ', valores em R$ mil' : ''}.</p>`;
+    c += tab('Balanço patrimonial: ativo', [...bp(d.ativo), ['Total do ativo', d.AT, true]]);
+    c += tab('Balanço patrimonial: passivo e patrimônio líquido', [...bp(d.passivo), ['Total do passivo + PL', d.PT, true]]);
+    c += tab('Demonstração do resultado', d.dre.map(l => [l.nome, l.v, l.cls === 'res' || l.cls === 'tot']));
+    if (d.dfc) c += tab('Demonstração dos fluxos de caixa', ROT_DFC.filter(([k]) => d.dfc[k] && d.dfc[k].val != null).map(([k, nome, cls]) => [nome || `${d.dfc[k].nome} (ponto de partida)`, d.dfc[k].val, !!cls]));
+    c += '<h2>Como as demonstrações se conectam</h2>' + [...document.querySelectorAll('#p-mapa .ligacao')].map(x => `<h3>${esc(x.querySelector('h3').textContent)}</h3><p>${esc(x.querySelector('p').textContent)}</p>`).join('');
+    return docWord(`Estruturas: ${emp}`, c);
+  }
+  if (aba === 'demo') {
+    let c = '';
+    for (const [k] of DEMOS) {
+      const d = await dadosDemo(k);
+      if (!d.linhas || !d.linhas.length) continue;
+      c += `<h2>${esc(d.titulo)}</h2><table><tr><th>Conta</th><th>Descrição</th>${d.cols.map(p => `<th>${esc(p.cab)}</th>`).join('')}</tr>`;
+      c += d.linhas.map(l => { const n = l.c.split('.').length; return `<tr${n <= 2 ? ' class="g"' : ''}><td>${esc(l.c)}</td><td style="padding-left:${6 + (n - 1) * 10}pt">${esc(l.d)}</td>${d.cols.map(p => `<td class="n">${l.v[p.i] == null ? '' : fmtN(l.v[p.i], Number.isInteger(l.v[p.i]) ? 0 : 2)}</td>`).join('')}</tr>`; }).join('') + '</table>';
+    }
+    return docWord(`Demonstrações contábeis: ${emp}`, c);
+  }
+  if (aba === 'estrutura') {
+    const per = state.caso.periodos;
+    let c = '';
+    for (const g of R.estrutura.grupos) {
+      c += `<h2>${esc(g.titulo)}</h2>${g.rep ? `<p>${esc(g.rep)}</p>` : ''}<table><tr><th>Conta</th>${per.map(p => `<th>${esc(p)}</th>`).join('')}${per.map(p => `<th>AV ${esc(p)}</th>`).join('')}${per.slice(1).map(p => `<th>AH ${esc(p)}</th>`).join('')}</tr>`;
+      c += [...g.linhas, ...(g.total ? [g.total] : [])].map((l, j, arr) => `<tr${g.total && j === arr.length - 1 ? ' class="g"' : ''}><td>${esc(l.nome)}</td>${l.v.map(v => `<td class="n">${v == null ? '' : fmtMoeda(v)}</td>`).join('')}${l.av.map(v => `<td class="n">${v == null ? '' : fmtN(v, 2) + '%'}</td>`).join('')}${l.ah.slice(1).map(v => `<td class="n">${v == null ? '' : fmtN(v, 2)}</td>`).join('')}</tr>`).join('') + '</table>';
+    }
+    return docWord(`Análise vertical e horizontal: ${emp}`, c);
+  }
+  if (aba === 'teste' && state.caso.preset === 'cia-grega') {
+    const t = $('#p-teste').cloneNode(true);
+    t.querySelectorAll('button, .barra-acoes').forEach(x => x.remove());
+    t.querySelectorAll('[data-tip]').forEach(x => { x.removeAttribute('data-tip'); x.removeAttribute('tabindex'); });
+    return docWord('Gabarito: Cia Grega', t.innerHTML);
+  }
+  return null;
+}
+$('#btn-copiar-csv').addEventListener('click', async () => { const r = await csvDaAba(); copiar(r.texto, r.rotulo); });
+$('#btn-csv').addEventListener('click', async () => { const r = await csvDaAba(); baixar(r.nome, '﻿' + r.texto, 'text/csv;charset=utf-8'); });
+$('#btn-word').addEventListener('click', async () => {
+  const html = await wordDaAba();
+  if (!html) { toast('O Word está disponível nas abas Análise, Estruturas, Demonstrações e AV e AH'); return; }
+  baixar(`${slug(NOME_ABA[state.aba])}-${slug(state.caso.empresa)}.doc`, '﻿' + html, 'application/msword');
 });
+$('#btn-pdf').addEventListener('click', () => { esconderDica(); setTimeout(() => window.print(), 50); });
+$('#btn-json').addEventListener('click', () => baixar(`caso-${slug(state.caso.empresa)}.json`, JSON.stringify({ caso: state.caso, params: state.params }, null, 1), 'application/json'));
+$('#btn-json').hidden = !PODE_EXPORTAR;
+function atualizarRotuloExportar() {
+  $('#rot-exportar').textContent = `Exportar a aba “${NOME_ABA[state.aba]}”:`;
+  $('#imp-aba').textContent = `${NOME_ABA[state.aba]} · gerado em ${new Date().toLocaleDateString('pt-BR')} pelo Analisador de Demonstrações`;
+  const semWord = ['dados', 'params'].includes(state.aba) || (state.aba === 'teste' && state.caso.preset !== 'cia-grega');
+  $('#btn-word').disabled = semWord;
+  $('#btn-word').title = semWord ? 'Disponível nas abas Análise, Estruturas, Demonstrações e AV e AH' : '';
+  $('#btn-csv').textContent = ['dados', 'params', 'teste'].includes(state.aba) ? 'CSV dos dados' : 'CSV';
+}
+$('#exportar').hidden = !PODE_EXPORTAR;
+$('#btn-branco').addEventListener('click', () => { usarCaso(casoBranco(), false); irAba('dados'); toast('Caso em branco: preencha os valores na aba Dados'); });
 
 // ---------- Parâmetros ----------
 const CAMPOS = [
@@ -870,8 +1003,11 @@ function renderTeste() {
   const ehCia = state.caso.preset === 'cia-grega' && !state.editado;
   const padrao = JSON.stringify(state.params) === JSON.stringify(E.PADRAO);
   let h = `<div class="grupo-cab"><h2>Gabarito: Cia Grega</h2></div><p class="leitura">Compara os índices calculados com os valores do material da Profa. Isabel (quadros 13 a 16). Cada valor é arredondado com as mesmas casas do material antes da comparação.</p>`;
-  if (!ehCia) h += `<div class="aviso"><strong>O teste vale só para o exemplo da Cia Grega sem edições.</strong> Escolha “Cia Grega” em Exemplos e dados próprios.</div>`;
-  else if (!padrao) h += `<div class="aviso"><strong>Os parâmetros não estão no padrão.</strong> Diferenças são esperadas; use “Voltar ao padrão” na aba Parâmetros.</div>`;
+  if (!ehCia) h += `<div class="barra-acoes"><button class="btn primario" type="button" id="btn-gabarito">Rodar o gabarito da Cia Grega</button><span class="nota">Carrega o exemplo da professora e confere os 51 valores. Depois, busque uma empresa para voltar à análise.</span></div>`;
+  else {
+    h += `<div class="barra-acoes"><button class="btn" type="button" id="btn-voltar-weg"${BASE ? '' : ' hidden'}>Voltar para a WEG</button></div>`;
+    if (!padrao) h += `<div class="aviso"><strong>Os parâmetros não estão no padrão.</strong> Diferenças são esperadas; use “Voltar ao padrão” na aba Parâmetros.</div>`;
+  }
   if (ehCia) {
     let ok = 0, tot = 0, linhas = '';
     for (const [id, [esp, dec]] of Object.entries(ESPERADO)) {
@@ -891,6 +1027,11 @@ function renderTeste() {
   el.innerHTML = h;
 }
 
+$('#p-teste').addEventListener('click', e => {
+  if (e.target.id === 'btn-gabarito') { usarCaso(clone(EX['cia-grega']), false); toast('Gabarito da Cia Grega carregado'); }
+  if (e.target.id === 'btn-voltar-weg') abrirEmpresa(CD_INICIAL);
+});
+
 // ---------- abas e cópia ----------
 function irAba(nome) {
   state.aba = nome;
@@ -900,6 +1041,7 @@ function irAba(nome) {
     $('#p-' + a).hidden = a !== nome;
   }
   if (nome === 'mapa') requestAnimationFrame(desenharLigacoes);
+  atualizarRotuloExportar();
   salvar();
 }
 document.querySelector('nav.abas').addEventListener('click', e => { const b = e.target.closest('.aba'); if (b) irAba(b.id.slice(2)); });

@@ -315,7 +315,7 @@ const Engine = (() => {
     // composição de numerador e denominador em cada período (para mostrar o cálculo)
     const comp = (entries, media, i) => entries.map(e => {
       const v = acc(e.c, i, media);
-      return v == null ? null : { nome: e.c.nome, v, k: e.k, media, v0: media ? e.c.v[i - 1] : null, v1: media ? e.c.v[i] : null };
+      return v == null ? null : { nome: e.c.nome, cod: e.c.cod, v, k: e.k, media, v0: media ? e.c.v[i - 1] : null, v1: media ? e.c.v[i] : null };
     }).filter(Boolean);
     const detalhe = vals.map((v, i) => {
       if (v == null) return null;
