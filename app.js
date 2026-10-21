@@ -1,7 +1,6 @@
-/* Interface do Analisador de Demonstrações. Depende de engine.js (window.Engine) e exemplos.js (window.EXEMPLOS). */
+/* Interface do Analisador de Demonstrações. Depende de engine.js (window.Engine). */
 (() => {
 const E = window.Engine;
-const EX = window.EXEMPLOS || {};
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtN = E.fmtN;
@@ -12,12 +11,6 @@ const BASE_URL = 'data/';
 // Fora do Claude (GitHub Pages, servidor local ou arquivo aberto no computador) os downloads funcionam.
 const PODE_EXPORTAR = /(^|\.)github\.io$/.test(location.hostname) || /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.protocol === 'file:';
 
-const ESPERADO = {
-  LI: [[.30, .35, .39], 2], LC: [[3.31, 2.87, 2.85], 2], LS: [[2.63, 2.43, 2.38], 2], LG: [[1.51, 1.73, 1.92], 2],
-  PCT: [[85, 71, 65], 0], CE: [[43, 57, 64], 0], IPL: [[57, 48, 40], 0], IRNC: [[38, 37, 33], 0],
-  GA: [[.60, .98, 1.00], 2], ML: [[13.16, 11.55, 12.46], 2], RA: [[7.87, 11.28, 12.43], 2], RPL: [[14.54, 19.26, 20.45], 2],
-  PMRE: [[135, 61, 70], 0], PMRV: [[168, 111, 97], 0], PMPC: [[null, 38, 35], 0], CO: [[303, 172, 167], 0], CF: [[null, 134, 132], 0]
-};
 const NOMES_GRUPO = Object.fromEntries(E.GRUPOS_BP);
 
 function casoBrancoInicial() { return casoBranco(); }
@@ -43,7 +36,7 @@ function carregar() {
     const s = JSON.parse(localStorage.getItem(CHAVE) || 'null');
     if (s && s.caso && Array.isArray(s.caso.contas)) {
       state.caso = s.caso; state.params = { ...E.PADRAO, ...(s.params || {}) }; state.editado = !!s.editado;
-      state.cvm = s.cvm || null; if (s.aba) state.aba = s.aba;
+      state.cvm = s.cvm || null; if (s.aba && ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'].includes(s.aba)) state.aba = s.aba;
       restaurado = true;
     }
   } catch (e) { }
@@ -607,11 +600,11 @@ function recalcular() {
   $('#titulo-empresa').textContent = state.caso.empresa || 'Empresa sem nome';
   const p = state.caso.periodos;
   const padrao = JSON.stringify(state.params) === JSON.stringify(E.PADRAO);
-  const origem = state.caso.preset === 'cvm' ? 'dados da CVM, R$ mil' : state.caso.preset === 'cia-grega' ? 'gabarito da Profa. Isabel' : 'dados próprios';
+  const origem = state.caso.preset === 'cvm' ? 'dados da CVM, R$ mil' : 'dados próprios';
   $('#meta-caso').textContent = `${p.length} ${p.length === 1 ? 'período' : 'períodos'} (${p[0]}${p.length > 1 ? ' a ' + p[p.length - 1] : ''}) · ${origem} · ${state.caso.contas.length} contas · parâmetros ${padrao ? 'no padrão da Profa. Isabel' : 'personalizados'}${state.editado ? ' · dados editados' : ''}`;
   if (state.caso.preset !== 'cvm') $('#periodos').hidden = true;
   TIPS.clear(); esconderDica();
-  renderAnalise(); renderMapa(); renderEstrutura(); renderTeste(); renderDemo();
+  renderAnalise(); renderMapa(); renderEstrutura(); renderDemo();
   salvar();
 }
 
@@ -660,23 +653,6 @@ function textoCompleto() {
   L.push('CONCLUSÃO INTEGRADA', ...R.conclusao);
   return L.join('\n');
 }
-function documentoWord() {
-  const per = state.caso.periodos;
-  const css = `body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4}h1{font-size:18pt}h2{font-size:14pt;margin-top:18pt}h3{font-size:12pt;margin-bottom:2pt}table{border-collapse:collapse;margin:6pt 0}td,th{border:1px solid #999;padding:3pt 6pt;font-size:10pt}th{background:#e8ece9}.n{text-align:right}.f{color:#555;font-size:9.5pt}p{text-align:justify}`;
-  let h = `<html><head><meta charset="utf-8"><title>Análise ${esc(state.caso.empresa)}</title><style>${css}</style></head><body>`;
-  h += `<h1>Análise das demonstrações contábeis: ${esc(state.caso.empresa || 'Empresa')}</h1>`;
-  if (state.caso.fonte) h += `<p class="f">Fonte: ${esc(state.caso.fonte)}</p>`;
-  for (const g of R.grupos) {
-    const its = g.ids.map(id => R.by[id]);
-    h += `<h2>${esc(g.titulo)}</h2><table><tr><th>Índice</th><th>Fórmula</th>${per.map(p => `<th>${esc(p)}</th>`).join('')}</tr>`;
-    h += its.map(i => `<tr><td>${esc(nomeIndice(i))} (${i.id})</td><td>${esc(i.formula)}</td>${i.fmt.map(v => `<td class="n">${esc(v)}</td>`).join('')}</tr>`).join('') + '</table>';
-    h += `<p>${esc(g.sintese)}</p>`;
-    for (const i of its) h += `<h3>${esc(nomeIndice(i))} (${i.id})</h3><p>${esc(i.texto)}</p>`;
-  }
-  h += `<h2>Conclusão integrada</h2>${R.conclusao.map(c => `<p>${esc(c)}</p>`).join('')}</body></html>`;
-  return h;
-}
-
 // ---------- AV e AH ----------
 function renderEstrutura() {
   const el = $('#p-estrutura'); const per = state.caso.periodos;
@@ -839,7 +815,7 @@ $('#arq-importar').addEventListener('change', e => {
   rd.readAsText(f, 'utf-8');
 });
 // ---------- exportação da aba aberta (PDF, Word, CSV) ----------
-const NOME_ABA = { analise: 'Análise', mapa: 'Estruturas', demo: 'Demonstrações', estrutura: 'AV e AH', dados: 'Dados', params: 'Parâmetros', teste: 'Teste' };
+const NOME_ABA = { analise: 'Análise', mapa: 'Estruturas', demo: 'Demonstrações', estrutura: 'AV e AH', dados: 'Dados', params: 'Parâmetros' };
 const numCSV = v => v == null || v === '' ? '' : String(Math.round(Number(v) * 100) / 100).replace('.', ',');
 const linhaCSV = arr => arr.map(x => { const t = String(x == null ? '' : x); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(';');
 async function csvDaAba() {
@@ -876,67 +852,192 @@ async function csvDaAba() {
   } else return { texto: paraCSV(), nome: `dados-${slug(state.caso.empresa)}.csv`, rotulo: 'Dados do caso' };
   return { texto: L.join('\n'), nome: `${slug(NOME_ABA[aba])}-${slug(state.caso.empresa)}.csv`, rotulo: 'Tabela' };
 }
-const CSS_WORD = 'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4}h1{font-size:18pt}h2{font-size:14pt;margin-top:18pt}h3{font-size:12pt;margin-bottom:2pt}table{border-collapse:collapse;margin:6pt 0}td,th{border:1px solid #999;padding:3pt 6pt;font-size:9.5pt}th{background:#e8ece9}.n{text-align:right}.f{color:#555;font-size:9.5pt}p{text-align:justify}.g td{font-weight:bold;background:#f2f4f1}';
-const docWord = (titulo, corpo) => `<html><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${CSS_WORD}</style></head><body><h1>${esc(titulo)}</h1>${state.caso.fonte ? `<p class="f">Fonte: ${esc(state.caso.fonte)}</p>` : ''}${corpo}</body></html>`;
-async function wordDaAba() {
-  const emp = state.caso.empresa || 'Empresa', aba = state.aba;
-  if (aba === 'analise') return documentoWord();
-  if (aba === 'mapa') {
-    const d = estruturaDados(state.mapaK != null ? state.mapaK : state.caso.periodos.length - 1);
-    const tab = (titulo, linhas) => `<h2>${esc(titulo)}</h2><table>${linhas.map(([n, v, g]) => `<tr${g ? ' class="g"' : ''}><td>${esc(n)}</td><td class="n">${fmtSin(v)}</td></tr>`).join('')}</table>`;
-    const bp = lado => lado.flatMap(gr => [[gr.titulo, gr.tot, true], ...gr.linhas.map(l => [l.nome, l.v])]);
-    let c = `<p>Exercício de ${esc(d.per)}${state.caso.preset && state.caso.preset.startsWith('cvm') ? ', valores em R$ mil' : ''}.</p>`;
-    c += tab('Balanço patrimonial: ativo', [...bp(d.ativo), ['Total do ativo', d.AT, true]]);
-    c += tab('Balanço patrimonial: passivo e patrimônio líquido', [...bp(d.passivo), ['Total do passivo + PL', d.PT, true]]);
-    c += tab('Demonstração do resultado', d.dre.map(l => [l.nome, l.v, l.cls === 'res' || l.cls === 'tot']));
-    if (d.dfc) c += tab('Demonstração dos fluxos de caixa', ROT_DFC.filter(([k]) => d.dfc[k] && d.dfc[k].val != null).map(([k, nome, cls]) => [nome || `${d.dfc[k].nome} (ponto de partida)`, d.dfc[k].val, !!cls]));
-    c += '<h2>Como as demonstrações se conectam</h2>' + [...document.querySelectorAll('#p-mapa .ligacao')].map(x => `<h3>${esc(x.querySelector('h3').textContent)}</h3><p>${esc(x.querySelector('p').textContent)}</p>`).join('');
-    return docWord(`Estruturas: ${emp}`, c);
-  }
-  if (aba === 'demo') {
-    let c = '';
+// Documento da aba aberta em blocos (título, subtítulo, parágrafo, tabela). O mesmo conteúdo vira
+// Word (HTML que o Word abre) ou PDF (arquivo gerado no navegador com jsPDF + AutoTable).
+const PDF_LIBS = [
+  'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+  'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'
+];
+const TITULO_ABA = { analise: 'Análise das demonstrações contábeis', mapa: 'Estruturas: balanço, DRE e fluxo de caixa', demo: 'Demonstrações contábeis', estrutura: 'Análise vertical e horizontal', dados: 'Dados do caso', params: 'Parâmetros da análise' };
+const fmtCel = v => v == null ? '' : fmtN(v, Number.isInteger(v) ? 0 : 2);
+async function documentoDaAba() {
+  const aba = state.aba, per = state.caso.periodos;
+  const B = [];
+  const sub = t => B.push({ t: 'h2', texto: t });
+  const h3 = t => B.push({ t: 'h3', texto: t });
+  const par = (t, nota) => B.push({ t: 'p', texto: t, nota });
+  const tab = (cab, linhas, o = {}) => B.push({ t: 'tab', cab, linhas, dir: o.dir || [], neg: o.neg || [], recuo: o.recuo || [], larga: o.larga });
+  if (aba === 'analise') {
+    for (const g of R.grupos) {
+      const its = g.ids.map(id => R.by[id]);
+      sub(g.titulo);
+      tab(['Índice', 'Fórmula', ...per, 'Evolução'], its.map(i => [`${nomeIndice(i)} (${i.id})`, i.formula, ...i.fmt, i.t ? (i.t.est ? 'estável' : `${i.delta} (${i.t.melhora ? 'melhora' : 'piora'})`) : '']),
+        { dir: per.map((_, k) => k + 2) });
+      par(g.sintese, true);
+      for (const i of its) { h3(`${nomeIndice(i)} (${i.id})`); par(i.texto); }
+    }
+    sub('Conclusão integrada');
+    R.conclusao.forEach(c => par('• ' + c));
+  } else if (aba === 'mapa') {
+    const k = state.mapaK != null ? state.mapaK : per.length - 1;
+    const d = estruturaDados(k);
+    par(`Exercício de ${d.per}${state.caso.preset && state.caso.preset.startsWith('cvm') ? ', valores em R$ mil' : ''}.`, true);
+    const bp = (lado, rot, total) => {
+      const L = [], neg = [];
+      lado.forEach(gr => { neg.push(L.length); L.push([gr.titulo, fmtSin(gr.tot)]); gr.linhas.forEach(l => L.push(['   ' + l.nome, fmtSin(l.v)])); });
+      neg.push(L.length); L.push([rot, fmtSin(total)]);
+      return { L, neg };
+    };
+    const a = bp(d.ativo, 'Total do ativo', d.AT), p = bp(d.passivo, 'Total do passivo + PL', d.PT);
+    sub('Balanço patrimonial: ativo'); tab(['Conta', d.per], a.L, { dir: [1], neg: a.neg });
+    sub('Balanço patrimonial: passivo e patrimônio líquido'); tab(['Conta', d.per], p.L, { dir: [1], neg: p.neg });
+    sub('Demonstração do resultado');
+    tab(['Linha', d.per], d.dre.map(l => [l.nome, fmtSin(l.v)]), { dir: [1], neg: d.dre.map((l, j) => l.cls ? j : -1).filter(j => j >= 0) });
+    if (d.dfc) {
+      const ls = ROT_DFC.filter(([c]) => d.dfc[c] && d.dfc[c].val != null);
+      sub('Demonstração dos fluxos de caixa');
+      tab(['Linha', d.per], ls.map(([c, nome]) => [nome || `${d.dfc[c].nome} (ponto de partida)`, fmtSin(d.dfc[c].val)]), { dir: [1], neg: ls.map(([, , cls], j) => cls ? j : -1).filter(j => j >= 0) });
+    }
+    sub('Como as demonstrações se conectam');
+    document.querySelectorAll('#p-mapa .ligacao').forEach(x => { h3(x.querySelector('h3').textContent); par(x.querySelector('p').textContent); });
+  } else if (aba === 'demo') {
     for (const [k] of DEMOS) {
       const d = await dadosDemo(k);
       if (!d.linhas || !d.linhas.length) continue;
-      c += `<h2>${esc(d.titulo)}</h2><table><tr><th>Conta</th><th>Descrição</th>${d.cols.map(p => `<th>${esc(p.cab)}</th>`).join('')}</tr>`;
-      c += d.linhas.map(l => { const n = l.c.split('.').length; return `<tr${n <= 2 ? ' class="g"' : ''}><td>${esc(l.c)}</td><td style="padding-left:${6 + (n - 1) * 10}pt">${esc(l.d)}</td>${d.cols.map(p => `<td class="n">${l.v[p.i] == null ? '' : fmtN(l.v[p.i], Number.isInteger(l.v[p.i]) ? 0 : 2)}</td>`).join('')}</tr>`; }).join('') + '</table>';
+      sub(d.titulo);
+      tab(['Conta', 'Descrição', ...d.cols.map(p => p.cab)], d.linhas.map(l => [l.c, l.d, ...d.cols.map(p => fmtCel(l.v[p.i]))]),
+        { dir: d.cols.map((_, j) => j + 2), neg: d.linhas.map((l, j) => l.c.split('.').length <= 2 ? j : -1).filter(j => j >= 0), recuo: d.linhas.map(l => l.c.split('.').length - 1) });
     }
-    return docWord(`Demonstrações contábeis: ${emp}`, c);
-  }
-  if (aba === 'estrutura') {
-    const per = state.caso.periodos;
-    let c = '';
+  } else if (aba === 'estrutura') {
+    par(`Análise vertical: contas do balanço sobre o ativo total e contas da DRE sobre a receita líquida. Análise horizontal: base 100 em ${per[0]}.`, true);
     for (const g of R.estrutura.grupos) {
-      c += `<h2>${esc(g.titulo)}</h2>${g.rep ? `<p>${esc(g.rep)}</p>` : ''}<table><tr><th>Conta</th>${per.map(p => `<th>${esc(p)}</th>`).join('')}${per.map(p => `<th>AV ${esc(p)}</th>`).join('')}${per.slice(1).map(p => `<th>AH ${esc(p)}</th>`).join('')}</tr>`;
-      c += [...g.linhas, ...(g.total ? [g.total] : [])].map((l, j, arr) => `<tr${g.total && j === arr.length - 1 ? ' class="g"' : ''}><td>${esc(l.nome)}</td>${l.v.map(v => `<td class="n">${v == null ? '' : fmtMoeda(v)}</td>`).join('')}${l.av.map(v => `<td class="n">${v == null ? '' : fmtN(v, 2) + '%'}</td>`).join('')}${l.ah.slice(1).map(v => `<td class="n">${v == null ? '' : fmtN(v, 2)}</td>`).join('')}</tr>`).join('') + '</table>';
+      sub(g.titulo);
+      if (g.rep) par(g.rep);
+      const ls = [...g.linhas, ...(g.total ? [g.total] : [])];
+      tab(['Conta', ...per, ...per.map(p => 'AV ' + p), ...per.slice(1).map(p => 'AH ' + p), ...per.slice(1).map(p => 'Var. ' + p)],
+        ls.map(l => [l.nome, ...l.v.map(v => v == null ? '' : fmtMoeda(v)), ...l.av.map(v => v == null ? '' : fmtN(v, 2) + '%'), ...l.ah.slice(1).map(v => v == null ? '' : fmtN(v, 2)), ...l.var.slice(1).map(v => v == null ? '' : (v >= 0 ? '+' : '−') + fmtN(Math.abs(v), 2) + '%')]),
+        { dir: Array.from({ length: per.length * 4 - 2 }, (_, j) => j + 1), neg: g.total ? [ls.length - 1] : [], larga: true });
     }
-    return docWord(`Análise vertical e horizontal: ${emp}`, c);
+  } else if (aba === 'dados') {
+    if (state.caso.fonte) par(state.caso.fonte, true);
+    for (const [g, titulo] of E.GRUPOS_BP) {
+      const cs = state.caso.contas.filter(c => c.cod.split('.')[0] === g);
+      if (!cs.length) continue;
+      sub(titulo);
+      tab(['Conta', 'Classificação', ...per], cs.map(c => [c.nome + (c.detalhe ? ' (já incluída)' : ''), NOME_COD[c.cod] || c.cod, ...c.v.map(v => fmtCel(E.num(v)))]), { dir: per.map((_, k) => k + 2) });
+    }
+  } else if (aba === 'params') {
+    for (const [leg, campos] of CAMPOS) {
+      sub(leg);
+      tab(['Parâmetro', 'Valor'], campos.map(([k, rot, tipo]) => {
+        const v = state.params[k];
+        const txt = tipo === 'num' ? (v === '' ? 'não informado' : fmtInput(v)) : ((tipo.find(([x]) => x === String(v)) || [, String(v)])[1]);
+        return [rot, txt];
+      }));
+    }
   }
-  if (aba === 'teste' && state.caso.preset === 'cia-grega') {
-    const t = $('#p-teste').cloneNode(true);
-    t.querySelectorAll('button, .barra-acoes').forEach(x => x.remove());
-    t.querySelectorAll('[data-tip]').forEach(x => { x.removeAttribute('data-tip'); x.removeAttribute('tabindex'); });
-    return docWord('Gabarito: Cia Grega', t.innerHTML);
-  }
-  return null;
+  return { titulo: `${TITULO_ABA[aba]}: ${state.caso.empresa || 'Empresa'}`, blocos: B };
 }
-$('#btn-copiar-csv').addEventListener('click', async () => { const r = await csvDaAba(); copiar(r.texto, r.rotulo); });
-$('#btn-csv').addEventListener('click', async () => { const r = await csvDaAba(); baixar(r.nome, '﻿' + r.texto, 'text/csv;charset=utf-8'); });
+
+const CSS_WORD = 'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4}h1{font-size:18pt}h2{font-size:14pt;margin-top:18pt}h3{font-size:12pt;margin-bottom:2pt}table{border-collapse:collapse;margin:6pt 0}td,th{border:1px solid #999;padding:3pt 6pt;font-size:9.5pt}th{background:#e8ece9}.n{text-align:right}.f{color:#555;font-size:9.5pt}p{text-align:justify}.g td{font-weight:bold;background:#f2f4f1}';
+function wordDoDocumento(doc) {
+  let c = '';
+  for (const b of doc.blocos) {
+    if (b.t === 'h2') c += `<h2>${esc(b.texto)}</h2>`;
+    else if (b.t === 'h3') c += `<h3>${esc(b.texto)}</h3>`;
+    else if (b.t === 'p') c += `<p${b.nota ? ' class="f"' : ''}>${esc(b.texto)}</p>`;
+    else c += `<table><tr>${b.cab.map(x => `<th>${esc(x)}</th>`).join('')}</tr>${b.linhas.map((l, j) => `<tr${b.neg.includes(j) ? ' class="g"' : ''}>${l.map((x, k) => `<td${b.dir.includes(k) ? ' class="n"' : ''}${k === 1 && b.recuo[j] ? ` style="padding-left:${6 + b.recuo[j] * 10}pt"` : ''}>${esc(x)}</td>`).join('')}</tr>`).join('')}</table>`;
+  }
+  return `<html><head><meta charset="utf-8"><title>${esc(doc.titulo)}</title><style>${CSS_WORD}</style></head><body><h1>${esc(doc.titulo)}</h1>${state.caso.fonte ? `<p class="f">Fonte: ${esc(state.caso.fonte)}</p>` : ''}${c}</body></html>`;
+}
+
+function carregarScript(src) {
+  return new Promise((ok, erro) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error(src)); document.head.appendChild(s); });
+}
+async function jsPDFpronto() {
+  const pronto = () => window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable;
+  if (!pronto()) { for (const src of PDF_LIBS) await carregarScript(src); }
+  if (!pronto()) throw new Error('jsPDF');
+  return window.jspdf.jsPDF;
+}
+// As fontes padrão do PDF cobrem o português; alguns símbolos são trocados por equivalentes.
+const txtPDF = s => String(s == null ? '' : s).replace(/−/g, '-').replace(/[→]/g, '->').replace(/[✓✗↑↓]/g, '').replace(/Δ/g, 'var. ').replace(/[  ]/g, ' ');
+async function pdfDoDocumento(doc) {
+  const jsPDF = await jsPDFpronto();
+  const larga = doc.blocos.some(b => b.t === 'tab' && (b.larga || b.cab.length > 6));
+  const pdf = new jsPDF({ orientation: larga ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+  const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight(), M = 14, LW = W - 2 * M;
+  const COR = [13, 102, 86], TINTA = [23, 32, 28], CINZA = [86, 100, 94];
+  let y = M + 4;
+  const quebra = h => { if (y + h > H - M - 6) { pdf.addPage(); y = M + 4; } };
+  const texto = (t, tam, estilo, cor, antes = 0, depois = 2) => {
+    pdf.setFont('helvetica', estilo); pdf.setFontSize(tam); pdf.setTextColor(...cor);
+    const linhas = pdf.splitTextToSize(txtPDF(t), LW);
+    const alt = tam * 0.3528 * 1.35;
+    y += antes;
+    for (const l of linhas) { quebra(alt); pdf.text(l, M, y + alt * 0.75); y += alt; }
+    y += depois;
+  };
+  texto(doc.titulo, 16, 'bold', TINTA, 0, 1);
+  if (state.caso.fonte) texto('Fonte: ' + state.caso.fonte, 8.5, 'normal', CINZA, 0, 3);
+  for (const b of doc.blocos) {
+    if (b.t === 'h2') { quebra(14); texto(b.texto, 12.5, 'bold', COR, 3, 1.5); }
+    else if (b.t === 'h3') { quebra(10); texto(b.texto, 10.5, 'bold', TINTA, 1.5, 0.8); }
+    else if (b.t === 'p') texto(b.texto, b.nota ? 8.5 : 9.5, 'normal', b.nota ? CINZA : TINTA, 0, 2.5);
+    else {
+      const cols = b.cab.length;
+      const fonte = cols > 10 ? 6.8 : cols > 6 ? 7.5 : 8.5;
+      pdf.autoTable({
+        startY: y, margin: { left: M, right: M, top: M + 6, bottom: M + 6 },
+        head: [b.cab.map(txtPDF)], body: b.linhas.map(l => l.map(txtPDF)),
+        theme: 'grid', styles: { font: 'helvetica', fontSize: fonte, cellPadding: 1.4, textColor: TINTA, lineColor: [214, 221, 216], lineWidth: 0.15, overflow: 'linebreak' },
+        headStyles: { fillColor: COR, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'left' },
+        columnStyles: Object.fromEntries(b.dir.map(k => [k, { halign: 'right' }])),
+        didParseCell: data => {
+          if (data.section === 'head' && b.dir.includes(data.column.index)) data.cell.styles.halign = 'right';
+          if (data.section !== 'body') return;
+          if (b.neg.includes(data.row.index)) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [242, 244, 241]; }
+          const r = b.recuo[data.row.index];
+          if (r && data.column.index === 1) data.cell.styles.cellPadding = { top: 1.4, bottom: 1.4, right: 1.4, left: 1.4 + r * 2.6 };
+        }
+      });
+      y = pdf.lastAutoTable.finalY + 4;
+    }
+  }
+  const n = pdf.internal.getNumberOfPages();
+  const rodape = `${state.caso.empresa || 'Empresa'} · ${NOME_ABA[state.aba]} · gerado em ${new Date().toLocaleDateString('pt-BR')} pelo Analisador de Demonstrações`;
+  for (let i = 1; i <= n; i++) {
+    pdf.setPage(i); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(...CINZA);
+    pdf.text(txtPDF(rodape), M, H - 7);
+    pdf.text(`Página ${i} de ${n}`, W - M, H - 7, { align: 'right' });
+  }
+  return pdf.output('blob');
+}
 $('#btn-word').addEventListener('click', async () => {
-  const html = await wordDaAba();
-  if (!html) { toast('O Word está disponível nas abas Análise, Estruturas, Demonstrações e AV e AH'); return; }
-  baixar(`${slug(NOME_ABA[state.aba])}-${slug(state.caso.empresa)}.doc`, '﻿' + html, 'application/msword');
+  const doc = await documentoDaAba();
+  baixar(`${slug(NOME_ABA[state.aba])}-${slug(state.caso.empresa)}.doc`, '﻿' + wordDoDocumento(doc), 'application/msword');
 });
-$('#btn-pdf').addEventListener('click', () => { esconderDica(); setTimeout(() => window.print(), 50); });
+$('#btn-pdf').addEventListener('click', async () => {
+  const b = $('#btn-pdf'); const rot = b.textContent;
+  b.disabled = true; b.textContent = 'Gerando PDF…'; esconderDica();
+  try {
+    const blob = await pdfDoDocumento(await documentoDaAba());
+    baixar(`${slug(NOME_ABA[state.aba])}-${slug(state.caso.empresa)}.pdf`, blob, 'application/pdf');
+    toast('PDF gerado');
+  } catch (e) {
+    toast('Não foi possível gerar o PDF. Verifique a conexão e tente de novo, ou use Imprimir.');
+  } finally { b.disabled = false; b.textContent = rot; }
+});
+$('#btn-imprimir').addEventListener('click', () => { esconderDica(); setTimeout(() => window.print(), 50); });
+
+$('#btn-copiar-csv').addEventListener('click', async () => { const r = await csvDaAba(); copiar(r.texto, r.rotulo); });
+$('#btn-csv').addEventListener('click', async () => { const r = await csvDaAba(); baixar(r.nome, '\ufeff' + r.texto, 'text/csv;charset=utf-8'); });
 $('#btn-json').addEventListener('click', () => baixar(`caso-${slug(state.caso.empresa)}.json`, JSON.stringify({ caso: state.caso, params: state.params }, null, 1), 'application/json'));
 $('#btn-json').hidden = !PODE_EXPORTAR;
 function atualizarRotuloExportar() {
   $('#rot-exportar').textContent = `Exportar a aba “${NOME_ABA[state.aba]}”:`;
   $('#imp-aba').textContent = `${NOME_ABA[state.aba]} · gerado em ${new Date().toLocaleDateString('pt-BR')} pelo Analisador de Demonstrações`;
-  const semWord = ['dados', 'params'].includes(state.aba) || (state.aba === 'teste' && state.caso.preset !== 'cia-grega');
-  $('#btn-word').disabled = semWord;
-  $('#btn-word').title = semWord ? 'Disponível nas abas Análise, Estruturas, Demonstrações e AV e AH' : '';
-  $('#btn-csv').textContent = ['dados', 'params', 'teste'].includes(state.aba) ? 'CSV dos dados' : 'CSV';
+  $('#btn-csv').textContent = ['dados', 'params'].includes(state.aba) ? 'CSV dos dados' : 'CSV';
 }
 $('#exportar').hidden = !PODE_EXPORTAR;
 $('#btn-branco').addEventListener('click', () => { usarCaso(casoBranco(), false); irAba('dados'); toast('Caso em branco: preencha os valores na aba Dados'); });
@@ -997,46 +1098,11 @@ $('#p-params').addEventListener('click', e => {
   if (e.target.id === 'btn-padrao') { state.params = { ...E.PADRAO }; renderParams(); recalcular(); toast('Parâmetros restaurados'); }
 });
 
-// ---------- Teste ----------
-function renderTeste() {
-  const el = $('#p-teste');
-  const ehCia = state.caso.preset === 'cia-grega' && !state.editado;
-  const padrao = JSON.stringify(state.params) === JSON.stringify(E.PADRAO);
-  let h = `<div class="grupo-cab"><h2>Gabarito: Cia Grega</h2></div><p class="leitura">Compara os índices calculados com os valores do material da Profa. Isabel (quadros 13 a 16). Cada valor é arredondado com as mesmas casas do material antes da comparação.</p>`;
-  if (!ehCia) h += `<div class="barra-acoes"><button class="btn primario" type="button" id="btn-gabarito">Rodar o gabarito da Cia Grega</button><span class="nota">Carrega o exemplo da professora e confere os 51 valores. Depois, busque uma empresa para voltar à análise.</span></div>`;
-  else {
-    h += `<div class="barra-acoes"><button class="btn" type="button" id="btn-voltar-weg"${BASE ? '' : ' hidden'}>Voltar para a WEG</button></div>`;
-    if (!padrao) h += `<div class="aviso"><strong>Os parâmetros não estão no padrão.</strong> Diferenças são esperadas; use “Voltar ao padrão” na aba Parâmetros.</div>`;
-  }
-  if (ehCia) {
-    let ok = 0, tot = 0, linhas = '';
-    for (const [id, [esp, dec]] of Object.entries(ESPERADO)) {
-      const i = R.by[id];
-      const cel = esp.map((e, k) => {
-        const v = i.vals[k]; const vr = v == null ? null : Math.round(v * 10 ** dec) / 10 ** dec;
-        const bate = (e == null && v == null) || (e != null && vr != null && Math.abs(vr - e) < 1e-9);
-        tot++; if (bate) ok++;
-        return `<td class="n">${e == null ? 'n/c' : fmtN(e, dec)}</td><td class="n">${v == null ? 'n/c' : fmtN(vr, dec)} <span class="${bate ? 'ok' : 'falha'}">${bate ? '✓' : '✗'}</span></td>`;
-      }).join('');
-      linhas += `<tr><td class="sigla">${id}</td>${cel}</tr>`;
-    }
-    h += `<p class="leitura"><span class="${ok === tot ? 'ok' : 'falha'}">${ok} de ${tot}</span> valores conferem com o material.</p>`;
-    h += `<div class="rolagem"><table><thead><tr><th>Índice</th>${state.caso.periodos.map(p => `<th class="n">${esc(p)} material</th><th class="n">${esc(p)} sistema</th>`).join('')}</tr></thead><tbody>${linhas}</tbody></table></div>`;
-    h += `<p class="nota">n/c = não calculável (falta o estoque do ano 0 para apurar as compras). O IPL do ano 1 usa o numerador 1.591, que reproduz o 0,57 do material; o quadro impresso mostra 1.519.</p>`;
-  }
-  el.innerHTML = h;
-}
-
-$('#p-teste').addEventListener('click', e => {
-  if (e.target.id === 'btn-gabarito') { usarCaso(clone(EX['cia-grega']), false); toast('Gabarito da Cia Grega carregado'); }
-  if (e.target.id === 'btn-voltar-weg') abrirEmpresa(CD_INICIAL);
-});
-
 // ---------- abas e cópia ----------
 function irAba(nome) {
   state.aba = nome;
   esconderDica();
-  for (const a of ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params', 'teste']) {
+  for (const a of ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params']) {
     $('#t-' + a).setAttribute('aria-selected', String(a === nome));
     $('#p-' + a).hidden = a !== nome;
   }

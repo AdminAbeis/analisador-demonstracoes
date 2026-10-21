@@ -273,9 +273,10 @@ footer.rodape a { color: var(--accent); }
     <span class="grupo-ferr">
       <span class="rot-ferr" id="rot-exportar">Exportar a aba aberta:</span>
       <span id="exportar" hidden>
-        <button class="btn" id="btn-pdf" type="button">Imprimir / PDF</button>
+        <button class="btn" id="btn-pdf" type="button">PDF</button>
         <button class="btn" id="btn-word" type="button">Word</button>
         <button class="btn" id="btn-csv" type="button">CSV</button>
+        <button class="btn" id="btn-imprimir" type="button">Imprimir</button>
       </span>
       <button class="btn" id="btn-copiar-csv" type="button">Copiar CSV</button>
       <button class="btn" id="btn-json" type="button" hidden>Salvar caso (.json)</button>
@@ -292,7 +293,6 @@ footer.rodape a { color: var(--accent); }
     <button class="aba" role="tab" id="t-estrutura" aria-controls="p-estrutura" aria-selected="false">AV e AH</button>
     <button class="aba" role="tab" id="t-dados" aria-controls="p-dados" aria-selected="false">Dados</button>
     <button class="aba" role="tab" id="t-params" aria-controls="p-params" aria-selected="false">Parâmetros</button>
-    <button class="aba" role="tab" id="t-teste" aria-controls="p-teste" aria-selected="false">Teste</button>
   </div>
 </nav>
 
@@ -303,7 +303,6 @@ footer.rodape a { color: var(--accent); }
   <section class="painel" id="p-estrutura" role="tabpanel" aria-labelledby="t-estrutura" hidden></section>
   <section class="painel" id="p-dados" role="tabpanel" aria-labelledby="t-dados" hidden></section>
   <section class="painel" id="p-params" role="tabpanel" aria-labelledby="t-params" hidden></section>
-  <section class="painel" id="p-teste" role="tabpanel" aria-labelledby="t-teste" hidden></section>
 </main>
 
 <footer class="rodape wrap" id="rodape"></footer>
@@ -311,7 +310,6 @@ footer.rodape a { color: var(--accent); }
 <div class="dica" id="dica" role="tooltip" hidden></div>
 
 <script src="engine.js"></script>
-<script src="exemplos.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
