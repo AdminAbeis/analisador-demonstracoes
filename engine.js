@@ -367,23 +367,35 @@ const Engine = (() => {
     return `${n} ${v(gN)} ${pct(gN)}, enquanto ${dd} ${v(gD)} ${pct(gD)}`;
   }
 
-  function explicar(entries, rot, i0, i1, media, estavel, S0, P) {
+  function explicar(entries, rot, i0, i1, media, estavel, S0, P, ctx) {
+    const R = (s, sel) => ({ s, sel: sel || [] });
+    const rsSin = ctx ? ctx.rsSin : sinal, rs = ctx ? ctx.rs : money;
+    const Lb = ctx ? ctx.Lb : [];
     const cs = entries.map(e => {
       const a0 = acc(e.c, i0, media), a1 = acc(e.c, i1, media);
-      return (a0 == null || a1 == null) ? null : { nome: e.c.nome, own: a1 - a0, d: e.k * (a1 - a0) };
+      return (a0 == null || a1 == null) ? null : { nome: e.c.nome, cod: e.c.cod, v: e.c.v, a0, a1, own: a1 - a0, d: e.k * (a1 - a0) };
     }).filter(Boolean);
+    const rotulo = x => {
+      let ev = '';
+      if (!x.a0 && x.a1) ev = `, conta que não existia em ${Lb[i0]}`;
+      else if (x.a0 && !x.a1) ev = `, conta zerada em ${Lb[i1]}`;
+      else if (x.a0 > 0 && x.a1 / x.a0 >= 2) ev = ', mais que dobrou';
+      return `${x.nome} (${rsSin(x.own)}${ev})`;
+    };
+    const ev = xs => { if (ctx) xs.forEach(x => evidencia(ctx, x.cod.startsWith('DRE') ? 'DRE' : 'BP', x.nome, x.v)); };
     if (cs.length === 1 && entries.length === 1 && !entries[0].exact && !estavel) {
-      return `As contas ${de(rot)} não estão detalhadas nos dados, por isso não é possível apontar qual conta explica a variação`;
+      return R(`As contas ${de(rot)} não estão detalhadas nos dados, por isso não é possível apontar qual conta explica a variação`);
     }
-    if (cs.length < 2) return '';
+    if (cs.length < 2) return R('');
     const tot = cs.reduce((s, x) => s + x.d, 0);
     if (estavel || Math.abs(tot) < 1e-9) {
       const gross = cs.reduce((s, x) => s + Math.abs(x.d), 0);
-      if (!S0 || gross < 0.1 * Math.abs(S0)) return '';
+      if (!S0 || gross < 0.1 * Math.abs(S0)) return R('');
       const up = cs.filter(x => x.own > 0).sort((a, b) => b.own - a.own)[0];
       const dn = cs.filter(x => x.own < 0).sort((a, b) => a.own - b.own)[0];
-      if (!up || !dn) return '';
-      return `Embora ${rot} tenha ficado praticamente estável, houve mudança na sua composição: ${up.nome} aumentou ${money(up.own)} e ${dn.nome} diminuiu ${money(dn.own)}`;
+      if (!up || !dn) return R('');
+      ev([up, dn]);
+      return R(`Embora ${rot} tenha ficado praticamente estável, houve mudança na sua composição: ${up.nome} aumentou ${rs(up.own)} e ${dn.nome} diminuiu ${rs(dn.own)}`, [up, dn]);
     }
     const mesmo = cs.filter(x => Math.sign(x.d) === Math.sign(tot)).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
     const sel = []; let acum = 0;
@@ -393,15 +405,16 @@ const Engine = (() => {
       sel.push(x); acum += p;
       if (acum >= P.varAcum || sel.length >= 3) break;
     }
-    if (!sel.length) return '';
+    if (!sel.length) return R('');
     const up = tot > 0;
     let s = sel.length === 1
-      ? `${cap(em(rot))}, a conta que mais ${up ? 'aumentou' : 'diminuiu'} foi ${sel[0].nome} (${sinal(sel[0].own)})`
-      : `${cap(em(rot))}, as contas que mais ${up ? 'aumentaram' : 'diminuíram'} foram ${lista(sel.map(x => `${x.nome} (${sinal(x.own)})`))}, que juntas ${acum > 100 ? 'superam a variação líquida do grupo' : `explicam ${fmtN(acum, 0)}% da variação`}`;
+      ? `${cap(em(rot))}, a conta que mais ${up ? 'aumentou' : 'diminuiu'} foi ${rotulo(sel[0])}`
+      : `${cap(em(rot))}, as contas que mais ${up ? 'aumentaram' : 'diminuíram'} foram ${lista(sel.map(rotulo))}, que juntas ${acum > 100 ? 'superam a variação líquida do grupo' : `explicam ${fmtN(acum, 0)}% da variação`}`;
     const at = cs.filter(x => Math.sign(x.d) !== Math.sign(tot) && Math.abs(x.d) / Math.abs(tot) * 100 >= P.atenuante)
       .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0];
-    if (at) s += `. Em sentido contrário, ${at.nome} ${at.own > 0 ? 'aumentou' : 'diminuiu'} ${money(at.own)}, compensando parte do movimento`;
-    return s;
+    if (at) s += `. Em sentido contrário, ${at.nome} ${at.own > 0 ? 'aumentou' : 'diminuiu'} ${rs(at.own)}, compensando parte do movimento`;
+    ev(at ? [...sel, at] : sel);
+    return R(s, at ? [...sel, at] : sel);
   }
 
   function explicarDRE(caso, i0, i1, sobe) {
@@ -423,9 +436,274 @@ const Engine = (() => {
     return s + '.';
   }
 
+  // ---------- cruzamentos: índice → fórmula → balanço → DRE e DFC ----------
+  // Regras genéricas: usam o código de cada conta no plano do sistema, o nome da conta (para
+  // reconhecer sua natureza), as taxas de crescimento e a DFC quando ela existe. Nada aqui é
+  // específico de uma empresa.
+  const semAc = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  const NATUREZA = {
+    passivo: [
+      ['dividendos', c => /DIVIDEND|JUROS SOBRE (O )?CAPITAL|\bJCP\b/.test(semAc(c.nome)), 'valores já destinados aos sócios, que ainda vão sair do caixa'],
+      ['adiantamentos', c => /ADIANTAMENTO.*CLIENT|ADIANT\. DE CLIENT|ENTREGA FUTURA|RECEITAS? (DIFERID|A APROPRIAR)/.test(semAc(c.nome)), 'recursos recebidos de clientes por produtos ou serviços ainda não entregues, sem juros, que costumam acompanhar a carteira de pedidos'],
+      ['arrendamentos', c => /ARRENDAMENT/.test(semAc(c.nome)), 'arrendamentos, isto é, aluguéis de longo prazo registrados como dívida'],
+      ['emprestimos', c => /\.EMP$/.test(c.cod) || /EMPREST|FINANCIAMENT|DEBENTUR/.test(semAc(c.nome)), 'dívida com juros (onerosa), que gera despesa financeira'],
+      ['fornecedores', c => c.cod === 'PC.FORN' || /FORNECED/.test(semAc(c.nome)), 'financiamento da operação pelos fornecedores, normalmente sem juros'],
+      ['pessoal', c => /SOCIAIS|TRABALHIST|SALARI|PARTICIPACAO NOS LUCROS|PARTICIPACAO NO RESULTADO/.test(semAc(c.nome)), 'obrigações com funcionários'],
+      ['tributos', c => /FISCA|TRIBUT|IMPOSTO|IR E CS|CONTRIBUICAO SOCIAL/.test(semAc(c.nome)), 'tributos a recolher'],
+      ['provisoes', c => /PROVIS/.test(semAc(c.nome)), 'provisões para gastos prováveis, como garantias e processos']
+    ],
+    ativo: [
+      ['caixa', c => ['AC.DISP', 'AC.APLIC'].includes(c.cod) || /CAIXA|EQUIVALENT/.test(semAc(c.nome)), 'recursos de liquidez imediata'],
+      ['estoques', c => c.cod === 'AC.EST' || /ESTOQUE/.test(semAc(c.nome)), 'produtos e materiais que só viram dinheiro depois de vendidos'],
+      ['clientes', c => c.cod === 'AC.CLI' || /CLIENTE|CONTAS A RECEBER|DUPLICAT/.test(semAc(c.nome)), 'vendas a prazo ainda não recebidas'],
+      ['tributos', c => /RECUPERAR|DIFERID/.test(semAc(c.nome)), 'tributos a recuperar ou compensar no futuro'],
+      ['imobilizado', c => c.cod === 'ANC.IMOB' || /IMOBILIZ|DIREITO DE USO/.test(semAc(c.nome)), 'máquinas, instalações e outros bens usados na operação'],
+      ['intangivel', c => c.cod === 'ANC.INT' || /INTANG|AGIO|GOODWILL/.test(semAc(c.nome)), 'marcas, softwares, carteiras de clientes e ágio de empresas adquiridas']
+    ],
+    pl: [
+      ['capital', c => c.cod === 'PL.CAP', 'recursos aportados pelos sócios ou lucros incorporados ao capital'],
+      ['reservas', c => c.cod === 'PL.RES' || /RESERVA.*LUCRO/.test(semAc(c.nome)), 'lucros retidos na empresa'],
+      ['tesouraria', c => /TESOURARIA/.test(semAc(c.nome)), 'ações recompradas pela própria empresa']
+    ]
+  };
+  function natureza(c) {
+    const g = c.cod.split('.')[0];
+    const lista = g === 'PC' || g === 'PNC' ? NATUREZA.passivo : g === 'AC' || g === 'ANC' ? NATUREZA.ativo : g === 'PL' ? NATUREZA.pl : [];
+    const n = lista.find(([, f]) => f(c));
+    return n ? { id: n[0], txt: n[2] } : null;
+  }
+  const ONEROSA = c => { const n = natureza(c); return n && (n.id === 'emprestimos' || n.id === 'arrendamentos'); };
+
+  function novoCtx(caso, P, res) {
+    const n = caso.periodos.length;
+    const escMil = caso.escala === 'mil';
+    const rs = v => {
+      if (v == null) return '—';
+      if (!escMil) return money(v);
+      const x = Math.abs(v) * 1000;
+      if (x >= 1e9) { const b = x / 1e9; return `R$ ${fmtN(b, 2)} ${b >= 2 ? 'bilhões' : 'bilhão'}`; }
+      if (x >= 1e6) { const m = x / 1e6; return `R$ ${fmtN(m, 2)} ${m >= 2 ? 'milhões' : 'milhão'}`; }
+      return `R$ ${fmtN(x, 0)}`;
+    };
+    const rsSin = v => (v >= 0 ? '+' : '−') + rs(v);
+    const serie = sels => serieLado(n, lado(caso, sels), false);
+    const dfc = caso.dfc && caso.dfc.length ? Object.fromEntries(caso.dfc.map(l => [l.cod, l])) : null;
+    return { caso, P, res, n, Lb: caso.periodos, rs, rsSin, serie, dfc, ja: new Set(), ev: [] };
+  }
+  function evidencia(ctx, fonte, nome, v) {
+    if (!v || !v.some(x => x != null)) return;
+    if (ctx.ev.some(e => (e.fonte === fonte && e.nome === nome) || JSON.stringify(e.v) === JSON.stringify(v))) return;
+    ctx.ev.push({ fonte, nome, v: v.slice() });
+  }
+  const somaDFC = (ctx, cod, i0, i1) => {
+    const l = ctx.dfc && ctx.dfc[cod]; if (!l) return null;
+    let s = 0, ok = false;
+    for (let i = i0 + 1; i <= i1; i++) if (l.v[i] != null) { s += l.v[i]; ok = true; }
+    return ok ? s : null;
+  };
+  const faixa = (Lb, i0, i1) => i1 - i0 === 1 ? `em ${Lb[i1]}` : `entre ${Lb[i0 + 1]} e ${Lb[i1]}`;
+
+  // natureza das contas citadas (cada conta é explicada uma vez em toda a análise)
+  function fraseNatureza(ctx, contas) {
+    const grupos = new Map();
+    for (const c of contas) {
+      const n = natureza(c);
+      if (!n || n.id === 'caixa' || ctx.ja.has('nat:' + c.nome)) continue;
+      ctx.ja.add('nat:' + c.nome);
+      if (!grupos.has(n.id)) grupos.set(n.id, { txt: n.txt, nomes: [] });
+      grupos.get(n.id).nomes.push(c.nome);
+    }
+    if (!grupos.size) return '';
+    const itens = [...grupos.values()].map(g => `${lista(g.nomes)} ${g.nomes.length > 1 ? 'correspondem' : 'corresponde'} a ${g.txt}`);
+    return `Quanto à natureza das contas citadas, ${itens.join('; ')}.`;
+  }
+  // dívida com e sem juros no aumento do capital de terceiros
+  function fraseOnerosa(ctx, i0, i1) {
+    if (ctx.ja.has('onerosa')) return '';
+    const cs = ctx.caso.contas.filter(c => /^(PC|PNC)\./.test(c.cod) && !c.detalhe && c.v[i0] != null && c.v[i1] != null);
+    if (cs.length < 2) return '';
+    const dOn = cs.filter(ONEROSA).reduce((s, c) => s + c.v[i1] - c.v[i0], 0);
+    const dTot = cs.reduce((s, c) => s + c.v[i1] - c.v[i0], 0);
+    if (!dTot || !cs.some(ONEROSA)) return '';
+    ctx.ja.add('onerosa');
+    const dSem = dTot - dOn;
+    cs.filter(ONEROSA).forEach(c => evidencia(ctx, 'BP', c.nome, c.v));
+    if (dTot > 0) {
+      const p = x => `${x < 0 ? '−' : ''}${ctx.rs(x)} (${fmtN(Math.abs(x / dTot) * 100, 0)}%)`;
+      return `Do aumento de ${ctx.rs(dTot)} no capital de terceiros entre ${ctx.Lb[i0]} e ${ctx.Lb[i1]}, ${p(dOn)} ${dOn < 0 ? 'foi redução de' : 'é'} dívida com juros (empréstimos, financiamentos e arrendamentos) e ${p(dSem)} ${dSem < 0 ? 'foi redução de' : 'são'} obrigações sem juros, como fornecedores, adiantamentos de clientes, dividendos e tributos a pagar.`;
+    }
+    return `O capital de terceiros diminuiu ${ctx.rs(dTot)} entre ${ctx.Lb[i0]} e ${ctx.Lb[i1]}; a dívida com juros variou ${ctx.rsSin(dOn)} e as obrigações sem juros ${ctx.rsSin(dSem)}.`;
+  }
+  // coerência de uma conta de giro com a atividade da DRE
+  function fraseCoerencia(ctx, tipo, i0, i1, curta) {
+    const S = ctx.serie;
+    const cfg = {
+      estoques: { conta: S(['AC.EST']), base: S(['DRE.CMV']), nomeC: 'Os estoques', nomeB: 'o custo das vendas (CMV)', evC: 'Estoques (total)', evB: 'Custo das vendas (CMV)', giro: 'o estoque girou' },
+      clientes: { conta: S(['AC.CLI']), base: S(['DRE.RL']), nomeC: 'O saldo de clientes', nomeB: 'a receita líquida', evC: 'Clientes (total)', evB: 'Receita líquida', giro: 'a carteira de clientes girou' },
+      fornecedores: { conta: S(['PC.FORN']), base: S(['DRE.CMV']), nomeC: 'O saldo de fornecedores', nomeB: 'o custo das vendas (CMV)', evC: 'Fornecedores (total)', evB: 'Custo das vendas (CMV)', giro: 'o saldo de fornecedores girou' }
+    }[tipo];
+    const a0 = cfg.conta[i0], a1 = cfg.conta[i1], b0 = cfg.base[i0], b1 = cfg.base[i1];
+    if (!a0 || !a1 || !b0 || !b1) return '';
+    const key = 'coer:' + tipo + (curta ? ':c' : ':l');
+    if (ctx.ja.has(key) || (curta && ctx.ja.has('coer:' + tipo + ':l'))) return '';
+    ctx.ja.add(key);
+    evidencia(ctx, 'BP', cfg.evC, cfg.conta); evidencia(ctx, 'DRE', cfg.evB, cfg.base);
+    const gc = a1 / a0 - 1, gb = b1 / b0 - 1, dif = (gc - gb) * 100;
+    const LIM = 5;
+    const rel = Math.abs(dif) < LIM ? `em linha com ${cfg.nomeB}` : dif > 0 ? `acima ${de(cfg.nomeB)}` : `abaixo ${de(cfg.nomeB)}`;
+    let s = `${cfg.nomeC} ${gc >= 0 ? 'cresceram' : 'diminuíram'} ${pct(gc)} entre ${ctx.Lb[i0]} e ${ctx.Lb[i1]}, ${rel} (${pctSig(gb)})`;
+    if (tipo !== 'estoques') s = s.replace('cresceram', 'cresceu').replace('diminuíram', 'diminuiu');
+    if (curta) return s + '.';
+    const g0 = b0 / a0, g1 = b1 / a1;
+    const leitura = {
+      estoques: dif >= LIM ? 'a empresa passou a manter mais estoque para cada real vendido, e o estoque fica mais tempo parado' : dif <= -LIM ? 'o estoque passou a girar mais rápido' : 'o ritmo do estoque se manteve',
+      clientes: dif >= LIM ? 'a empresa passou a demorar mais para receber suas vendas' : dif <= -LIM ? 'a empresa passou a receber mais rápido' : 'o prazo de recebimento se manteve',
+      fornecedores: dif >= LIM ? 'a empresa passou a usar mais prazo dos fornecedores' : dif <= -LIM ? 'o prazo obtido dos fornecedores encurtou' : 'o prazo concedido pelos fornecedores se manteve'
+    }[tipo];
+    return `${s}: ${leitura}. Pela razão entre ${cfg.nomeB.replace(/ \(CMV\)/, '')} e o saldo, ${cfg.giro} ${fmtN(g0, 2)} vezes em ${ctx.Lb[i0]} e ${fmtN(g1, 2)} vezes em ${ctx.Lb[i1]}.`;
+  }
+  // fontes e usos de caixa pela DFC
+  function fraseDFC(ctx, i0, i1) {
+    if (!ctx.dfc || ctx.ja.has('dfc') || i1 <= i0) return '';
+    const OP = somaDFC(ctx, 'DFC.OP', i0, i1);
+    if (OP == null) return '';
+    ctx.ja.add('dfc');
+    const CAPEX = somaDFC(ctx, 'DFC.CAPEX', i0, i1), AQ = somaDFC(ctx, 'DFC.AQ', i0, i1), DIV = somaDFC(ctx, 'DFC.DIV', i0, i1), EMP = somaDFC(ctx, 'DFC.EMP', i0, i1), VAR = somaDFC(ctx, 'DFC.VAR', i0, i1);
+    for (const [c, nome] of [['DFC.OP', 'Caixa das atividades operacionais'], ['DFC.CAPEX', 'Aquisição de imobilizado e intangível'], ['DFC.AQ', 'Aquisição de empresas e participações'], ['DFC.DIV', 'Dividendos e JCP pagos'], ['DFC.EMP', 'Empréstimos: captações menos pagamentos'], ['DFC.VAR', 'Variação do caixa']])
+      if (ctx.dfc[c]) evidencia(ctx, 'DFC', nome, ctx.dfc[c].v);
+    const usos = [];
+    if (CAPEX) usos.push(`aplicou ${ctx.rs(CAPEX)} em imobilizado e intangível`);
+    if (AQ) usos.push(`${ctx.rs(AQ)} na aquisição de empresas e participações`);
+    if (DIV) usos.push(`pagou ${ctx.rs(DIV)} em dividendos e JCP`);
+    let s = `Pela demonstração dos fluxos de caixa, ${faixa(ctx.Lb, i0, i1)} as operações ${OP >= 0 ? 'geraram' : 'consumiram'} ${ctx.rs(OP)} de caixa`;
+    if (usos.length) s += `; no mesmo período, a empresa ${lista(usos)}`;
+    if (EMP != null && EMP !== 0) s += `, e os empréstimos ${EMP > 0 ? 'trouxeram' : 'consumiram'} ${ctx.rs(EMP)} líquidos (captações menos pagamentos)`;
+    s += '.';
+    const inv = Math.abs(CAPEX || 0) + Math.abs(AQ || 0);
+    if (inv && OP > 0) s += OP >= inv ? ' Os investimentos foram cobertos pelo caixa gerado pela própria operação.' : ' Os investimentos superaram o caixa gerado pela operação e dependeram de empréstimos ou do caixa acumulado.';
+    if (VAR != null) s += ` Ao final, o caixa ${VAR >= 0 ? 'aumentou' : 'diminuiu'} ${ctx.rs(VAR)}.`;
+    return s;
+  }
+  // investimentos: crescimento do ativo fixo × o que a DFC mostra
+  function fraseInvestimentos(ctx, i0, i1) {
+    if (ctx.ja.has('dfc-inv') || i1 <= i0) return '';
+    const S = ctx.serie;
+    const imob = S(['ANC.IMOB']), intg = S(['ANC.INT']);
+    const di = imob[i0] != null && imob[i1] != null ? imob[i1] - imob[i0] : null;
+    const dt = intg[i0] != null && intg[i1] != null ? intg[i1] - intg[i0] : null;
+    if (di == null && dt == null) return '';
+    ctx.ja.add('dfc-inv');
+    evidencia(ctx, 'BP', 'Imobilizado (total)', imob); evidencia(ctx, 'BP', 'Intangível (total)', intg);
+    const partes = [];
+    if (di) partes.push(`o imobilizado ${di > 0 ? 'cresceu' : 'diminuiu'} ${ctx.rs(di)} (${pctSig(imob[i1] / imob[i0] - 1)})`);
+    if (dt) partes.push(`o intangível ${dt > 0 ? 'cresceu' : 'diminuiu'} ${ctx.rs(dt)}${intg[i0] ? ` (${pctSig(intg[i1] / intg[i0] - 1)})` : ''}`);
+    let s = `Entre ${ctx.Lb[i0]} e ${ctx.Lb[i1]}, ${lista(partes)}.`;
+    const CAPEX = somaDFC(ctx, 'DFC.CAPEX', i0, i1), AQ = somaDFC(ctx, 'DFC.AQ', i0, i1);
+    if (CAPEX != null || AQ != null) {
+      if (ctx.dfc['DFC.CAPEX']) evidencia(ctx, 'DFC', 'Aquisição de imobilizado e intangível', ctx.dfc['DFC.CAPEX'].v);
+      if (ctx.dfc['DFC.AQ']) evidencia(ctx, 'DFC', 'Aquisição de empresas e participações', ctx.dfc['DFC.AQ'].v);
+      s += ` A DFC registra, ${faixa(ctx.Lb, i0, i1)}, ${CAPEX ? `${ctx.rs(CAPEX)} em compras de imobilizado e intangível` : 'nenhuma compra relevante de imobilizado'}${AQ ? ` e ${ctx.rs(AQ)} em aquisição de empresas, o que costuma explicar saltos no intangível (ágio e marcas das empresas compradas)` : ''}; a diferença para a variação do balanço vem da depreciação, da amortização e de ajustes de câmbio.`;
+    }
+    return s;
+  }
+  // DuPont: RA = margem × giro; RPL = RA × alavancagem
+  function fraseDuPont(ctx, id, i0, i1) {
+    const R = ctx.res;
+    if (!R.ML || !R.GA || !R.RA) return '';
+    const ML = R.ML.vals, GA = R.GA.vals, RA = R.RA.vals;
+    if ([ML[i0], ML[i1], GA[i0], GA[i1]].some(v => v == null || v <= 0)) return '';
+    evidencia(ctx, 'Índice', 'Margem líquida (%)', ML); evidencia(ctx, 'Índice', 'Giro do ativo', GA);
+    if (id === 'RA') {
+      const cM = Math.log(ML[i1] / ML[i0]), cG = Math.log(GA[i1] / GA[i0]);
+      const dir = x => x >= 0 ? 'alta' : 'queda';
+      const v = x => x >= 0 ? 'subiu' : 'caiu';
+      const maior = Math.abs(cM) >= Math.abs(cG);
+      let s = `A rentabilidade do ativo é a margem líquida multiplicada pelo giro do ativo: em ${ctx.Lb[i1]}, ${fmtN(ML[i1], 2)}% × ${fmtN(GA[i1], 2)} = ${fmtN(RA[i1], 2)}%. De ${ctx.Lb[i0]} para ${ctx.Lb[i1]}, a margem ${v(cM)} de ${fmtN(ML[i0], 2)}% para ${fmtN(ML[i1], 2)}% e o giro ${v(cG)} de ${fmtN(GA[i0], 2)} para ${fmtN(GA[i1], 2)}`;
+      if (Math.sign(cM) === Math.sign(cG)) s += `; as duas variações atuaram no mesmo sentido, com peso maior ${maior ? 'da margem' : 'do giro'}.`;
+      else s += `; a ${dir(maior ? cM : cG)} ${maior ? 'da margem' : 'do giro'} pesou mais que a ${dir(maior ? cG : cM)} ${maior ? 'do giro' : 'da margem'}.`;
+      return s;
+    }
+    if (id === 'RPL' && R.RPL) {
+      const RPL = R.RPL.vals;
+      if ([RA[i0], RA[i1], RPL[i0], RPL[i1]].some(v => v == null || v <= 0)) return '';
+      const m0 = RPL[i0] / RA[i0], m1 = RPL[i1] / RA[i1];
+      evidencia(ctx, 'Índice', 'Rentabilidade do ativo (%)', RA);
+      let s = `O retorno do patrimônio líquido é a rentabilidade do ativo multiplicada pela alavancagem (ativo ÷ PL): em ${ctx.Lb[i1]}, ${fmtN(RA[i1], 2)}% × ${fmtN(m1, 2)} = ${fmtN(RPL[i1], 2)}%. A alavancagem passou de ${fmtN(m0, 2)} para ${fmtN(m1, 2)} vezes`;
+      s += Math.abs(m1 - m0) < 0.05 ? ', sem mudança relevante.' : m1 > m0 ? ', ou seja, cada real de capital próprio passou a sustentar mais ativo, o que eleva o retorno dos sócios e também o risco.' : ', ou seja, a empresa passou a depender menos de capital de terceiros.';
+      const PL = ctx.serie(['PL.']), LL = ctx.serie(['DRE.LL']);
+      if (PL[i0] != null && PL[i1] != null && i1 > i0) {
+        let soma = 0; for (let i = i0 + 1; i <= i1; i++) soma += LL[i] || 0;
+        const dPL = PL[i1] - PL[i0];
+        evidencia(ctx, 'BP', 'Patrimônio líquido (total)', PL); evidencia(ctx, 'DRE', 'Lucro líquido', LL);
+        s += ` ${cap(faixa(ctx.Lb, i0, i1))}, o lucro somou ${ctx.rs(soma)}, mas o PL variou ${ctx.rsSin(dPL)}`;
+        const DIV = somaDFC(ctx, 'DFC.DIV', i0, i1);
+        if (DIV) { s += `; a diferença se explica principalmente pelos dividendos e JCP pagos (${ctx.rs(DIV)}, segundo a DFC) e pelos que foram aprovados e ainda serão pagos.`; evidencia(ctx, 'DFC', 'Dividendos e JCP pagos', ctx.dfc['DFC.DIV'].v); }
+        else s += dPL < soma ? '; a diferença corresponde a lucros distribuídos aos sócios e a outros movimentos do PL.' : '; o PL cresceu mais que o lucro, o que indica aportes de capital ou outros ajustes.';
+      }
+      return s;
+    }
+    return '';
+  }
+  // necessidade de capital de giro × capital circulante líquido
+  function fraseCapitalGiro(ctx, i0, i1) {
+    const S = ctx.serie;
+    const cli = S(['AC.CLI']), est = S(['AC.EST']), forn = S(['PC.FORN']), ac = S(['AC.']), pc = S(['PC.']);
+    const ncg = i => (cli[i] != null && est[i] != null && forn[i] != null) ? cli[i] + est[i] - forn[i] : null;
+    const n0 = ncg(i0), n1 = ncg(i1);
+    if (n0 == null || n1 == null || ac[i1] == null || pc[i1] == null) return '';
+    evidencia(ctx, 'BP', 'Clientes (total)', cli); evidencia(ctx, 'BP', 'Estoques (total)', est); evidencia(ctx, 'BP', 'Fornecedores (total)', forn);
+    const ccl = ac[i1] - pc[i1];
+    let s = `Em reais, a necessidade de capital de giro da operação (clientes + estoques − fornecedores) passou de ${ctx.rs(n0)} em ${ctx.Lb[i0]} para ${ctx.rs(n1)} em ${ctx.Lb[i1]}. O capital circulante líquido (AC − PC) é de ${ctx.rs(ccl)} em ${ctx.Lb[i1]}`;
+    s += ccl >= n1 ? ', suficiente para cobrir essa necessidade.' : ccl > 0 ? ', menor que essa necessidade: a diferença é financiada com recursos de curto prazo.' : ', negativo: a operação depende de recursos de curto prazo de terceiros.';
+    return s;
+  }
+  // último ano: quando a causa difere do período todo
+  function fraseUltimoAno(ctx, d, r, idx, contaPrincipal) {
+    if (idx.length < 3 || d.tipo !== 'razao') return '';
+    const a = idx[idx.length - 2], b = idx[idx.length - 1];
+    const N0 = r.N[a], N1 = r.N[b], D0 = r.D[a], D1 = r.D[b];
+    if (!(N0 > 0 && D0 > 0)) return '';
+    const gN = N1 / N0 - 1, gD = D1 / D0 - 1;
+    const ladoN = Math.abs(gN) >= Math.abs(gD);
+    const l = ladoN ? { e: r.eN, rot: d.num.rot, m: r.mN, g: gN } : { e: r.eD, rot: d.den.rot, m: r.mD, g: gD };
+    if (l.e.length < 2) return '';
+    const top = topContas(l.e, a, b, l.m);
+    if (!top.length) return '';
+    if (contaPrincipal && top[0].nome === contaPrincipal && Math.sign(gN - gD) === Math.sign(r.N[idx[idx.length - 1]] / r.N[idx[0]] - r.D[idx[idx.length - 1]] / r.D[idx[0]])) return '';
+    top.slice(0, 2).forEach(x => evidencia(ctx, x.fonte, x.nome, x.v));
+    return `No último ano (${ctx.Lb[a]} para ${ctx.Lb[b]}), o movimento veio principalmente ${de(l.rot)}, que ${l.g >= 0 ? 'aumentou' : 'diminuiu'} ${pct(l.g)}, com destaque para ${lista(top.slice(0, 2).map(x => `${x.nome} (${ctx.rsSin(x.own)})`))}.`;
+  }
+  function topContas(entries, i0, i1, media) {
+    const cs = entries.map(e => {
+      const a0 = acc(e.c, i0, media), a1 = acc(e.c, i1, media);
+      return (a0 == null || a1 == null) ? null : { nome: e.c.nome, cod: e.c.cod, v: e.c.v, own: a1 - a0, d: e.k * (a1 - a0), fonte: e.c.cod.startsWith('DRE') ? 'DRE' : 'BP' };
+    }).filter(Boolean);
+    const tot = cs.reduce((s, x) => s + x.d, 0);
+    return cs.filter(x => Math.sign(x.d) === Math.sign(tot) && x.d !== 0).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+  }
+  // parágrafo de abertura
+  function abertura(caso, ctx) {
+    const Lb = caso.periodos, n = Lb.length;
+    const emp = caso.empresa || 'a empresa';
+    let s = `Foram analisados ${n > 1 ? `os exercícios de ${Lb[0]} a ${Lb[n - 1]}` : `o exercício de ${Lb[0]}`} da ${emp}`;
+    if (caso.setor) s += `, companhia classificada pela CVM no setor “${caso.setor}”`;
+    s += caso.escala === 'mil' ? ', com base nas demonstrações financeiras padronizadas (DFP) entregues à CVM, com valores em milhares de reais.' : '.';
+    if (n > 1) {
+      const RL = ctx.serie(['DRE.RL']), AT = ctx.serie(['AC.', 'ANC.']), LL = ctx.serie(['DRE.LL']);
+      const fr = [];
+      if (RL[0] && RL[n - 1]) fr.push(`a receita líquida ${RL[n - 1] >= RL[0] ? 'cresceu' : 'caiu'} ${pct(RL[n - 1] / RL[0] - 1)} (de ${ctx.rs(RL[0])} para ${ctx.rs(RL[n - 1])})`);
+      if (AT[0] && AT[n - 1]) fr.push(`o ativo total ${AT[n - 1] >= AT[0] ? 'cresceu' : 'caiu'} ${pct(AT[n - 1] / AT[0] - 1)}`);
+      if (LL[0] > 0 && LL[n - 1] != null) fr.push(LL[n - 1] > 0 ? `o lucro líquido ${LL[n - 1] >= LL[0] ? 'cresceu' : 'caiu'} ${pct(LL[n - 1] / LL[0] - 1)}` : 'a empresa passou a registrar prejuízo');
+      if (fr.length) s += ` No período, ${lista(fr)}.`;
+    }
+    return s;
+  }
+
   // ---------- texto por índice ----------
-  function texto(r, res, caso, P) {
+  function texto(r, res, caso, P, ctx) {
     const d = r.d, Lb = caso.periodos, n = Lb.length;
+    ctx.ev = [];
+    let contaPrincipal = null;
     const idx = r.vals.map((v, i) => v == null ? null : i).filter(i => i != null);
     const partes = [];
     if (!idx.length) return { paragrafo: `Não foi possível calcular ${d.nome} com os dados informados.`, t: null };
@@ -463,17 +741,47 @@ const Engine = (() => {
           { g: gN, e: r.eN, rot: d.num.rot, m: r.mN, S0: N0 },
           { g: gD, e: r.eD, rot: d.den.rot, m: r.mD, S0: D0 }
         ].sort((a, b) => Math.abs(b.g || 0) - Math.abs(a.g || 0));
+        evidencia(ctx, d.num.compras ? 'Cálculo' : (d.num.sels || []).every(x => x.replace('-', '').startsWith('DRE')) ? 'DRE' : 'BP', cap(sem(d.num.rot)), r.N);
+        evidencia(ctx, d.den.compras ? 'Cálculo' : (d.den.sels || []).every(x => x.replace('-', '').startsWith('DRE')) ? 'DRE' : 'BP', cap(sem(d.den.rot)), r.D);
+        const citadas = [];
         for (const l of lados) {
           if (!l.e.length) continue;
           const est = l.g == null ? false : Math.abs(l.g * 100) < P.estGrupo;
-          const s = explicar(l.e, l.rot, t.i0, t.i1, l.m, est, l.S0, P);
-          if (s) partes.push(s + '.');
+          const x = explicar(l.e, l.rot, t.i0, t.i1, l.m, est, l.S0, P, ctx);
+          if (x.s) partes.push(x.s + '.');
+          if (!contaPrincipal && x.sel.length) contaPrincipal = x.sel[0].nome;
+          citadas.push(...x.sel);
         }
+        const nat = fraseNatureza(ctx, citadas.filter(c => !c.cod.startsWith('DRE')));
+        if (nat) partes.push(nat);
+        const temCod = cod => citadas.some(c => c.cod === cod);
+        const cap0 = citadas.find(c => c.cod === 'PL.CAP'), res0 = citadas.find(c => c.cod === 'PL.RES');
+        if (cap0 && res0 && cap0.own > 0 && res0.own < 0 && Math.abs(cap0.own + res0.own) < 0.3 * cap0.own && !ctx.ja.has('capitaliz')) {
+          ctx.ja.add('capitaliz');
+          partes.push('O aumento do capital social acompanhado da redução das reservas de lucros indica que reservas foram incorporadas ao capital, um movimento dentro do próprio patrimônio líquido, sem entrada de dinheiro novo.');
+        }
+        if (d.id === 'LC') { if (temCod('AC.EST')) partes.push(fraseCoerencia(ctx, 'estoques', t.i0, t.i1, true)); if (temCod('AC.CLI')) partes.push(fraseCoerencia(ctx, 'clientes', t.i0, t.i1, true)); }
+        if (d.id === 'LS' && temCod('AC.CLI')) partes.push(fraseCoerencia(ctx, 'clientes', t.i0, t.i1, true));
       }
+      // cruzamentos próprios de cada índice
+      const cz = {
+        LI: () => fraseDFC(ctx, t.i0, t.i1),
+        PCT: () => fraseOnerosa(ctx, t.i0, t.i1),
+        CE: () => fraseOnerosa(ctx, t.i0, t.i1),
+        IPL: () => fraseInvestimentos(ctx, t.i0, t.i1),
+        RA: () => fraseDuPont(ctx, 'RA', t.i0, t.i1),
+        RPL: () => fraseDuPont(ctx, 'RPL', t.i0, t.i1),
+        PMRE: () => fraseCoerencia(ctx, 'estoques', t.i0, t.i1, false),
+        PMRV: () => fraseCoerencia(ctx, 'clientes', t.i0, t.i1, false),
+        PMPC: () => fraseCoerencia(ctx, 'fornecedores', t.i0, t.i1, false),
+        CF: () => fraseCapitalGiro(ctx, t.i0, t.i1)
+      }[d.id];
+      if (cz) { const x = cz(); if (x) partes.push(x); }
       if (!t.est && (d.id === 'ML' || d.id === 'RA' || d.id === 'RPL')) {
         const sDRE = explicarDRE(caso, t.i0, t.i1, t.d > 0, P);
         if (sDRE && d.id === 'ML') partes.push(sDRE);
       }
+      if (d.tipo === 'soma') d.parts.forEach(([id]) => evidencia(ctx, 'Índice', cap(sem(res[id].d.nome)) + ' (dias)', res[id].vals));
       if (!t.est && d.tipo === 'soma') {
         partes.push(d.explica);
         const comps = d.parts.map(([id, k]) => {
@@ -490,13 +798,14 @@ const Engine = (() => {
         for (let k = 1; k < t.idx.length; k++) {
           const a = t.idx[k - 1], b = t.idx[k], dl = arred(d, r.vals[b], P) - arred(d, r.vals[a], P);
           let det = '';
-          if (d.tipo === 'razao' && r.N[a] > 0 && r.D[a] > 0) det = ` (${sem(d.num.rot)} ${pctSig(r.N[b] / r.N[a] - 1)}; ${sem(d.den.rot)} ${pctSig(r.D[b] / r.D[a] - 1)})`;
+          if (d.tipo === 'razao' && r.N[a] > 0 && r.D[a] > 0) det = `, com ${sem(d.num.rot)} ${pctSig(r.N[b] / r.N[a] - 1)} e ${sem(d.den.rot)} ${pctSig(r.D[b] / r.D[a] - 1)}`;
           passos.push({ a, b, dl, det, s: estavelDelta(d, dl, r.vals[a], P) ? 0 : Math.sign(dl) });
         }
         const sinais = new Set(passos.map(p => p.s).filter(x => x));
-        if (sinais.size > 1) {
-          partes.push(`A trajetória, porém, não foi linear: ${passos.map(p => `${perPar(Lb[p.a], Lb[p.b])}, ${p.s === 0 ? 'ficou praticamente estável' : (p.dl > 0 ? 'subiu ' : 'caiu ') + fmtDelta(d, p.dl, P)}${p.det}`).join('; ')}.`);
-        }
+        const fv = i => fmtValLongo(d, arred(d, r.vals[i], P), P);
+        const passo = p => `${perPar(Lb[p.a], Lb[p.b])}, passou de ${fv(p.a)} para ${fv(p.b)} (${p.s === 0 ? 'praticamente estável' : (p.dl > 0 ? '+' : '−') + fmtDelta(d, p.dl, P)})${p.det}`;
+        partes.push(`${sinais.size > 1 ? 'A trajetória, porém, não foi linear' : 'Ano a ano'}: ${passos.map(passo).join('; ')}.`);
+        if (!t.est) { const u = fraseUltimoAno(ctx, d, r, t.idx, contaPrincipal); if (u) partes.push(u); }
       }
     }
     const vLast = r.vals[idx[idx.length - 1]];
@@ -508,7 +817,7 @@ const Engine = (() => {
         partes.push(`Vale notar que ${fmtN((vLast - ls) / vLast * 100, 0)}% do ativo circulante está em estoques e despesas antecipadas, o que torna essa folga dependente das vendas.`);
     }
     partes.push(d.intr(vLast, P));
-    return { paragrafo: partes.join(' '), t };
+    return { paragrafo: partes.filter(Boolean).join(' '), t, ev: ctx.ev };
   }
 
   // ---------- estrutura (AV / AH / representatividade) ----------
@@ -583,9 +892,10 @@ const Engine = (() => {
     const res = {};
     for (const d of D) if (d.tipo === 'razao') res[d.id] = calcRazao(d, caso, P, n);
     for (const d of D) if (d.tipo === 'soma') res[d.id] = calcSoma(d, res, n);
+    const ctx = novoCtx(caso, P, res);
     const indices = D.map(d => {
       const r = res[d.id];
-      const tx = texto(r, res, caso, P);
+      const tx = texto(r, res, caso, P, ctx);
       let calc;
       if (d.tipo === 'razao') {
         const m = r.mult === 1 ? '' : ` × ${r.mult}`;
@@ -598,7 +908,7 @@ const Engine = (() => {
         : r.vals.map((v, i) => v == null ? null : { partes: d.parts.map(([id, k]) => ({ id, nome: res[id].d.nome, v: res[id].vals[i], k })) });
       return {
         id: d.id, grupo: d.grupo, nome: d.nome, formula: d.formula, unid: d.unid, dir: d.dir, detalhe,
-        vals: r.vals, fmt: r.vals.map(v => fmtVal(d, v, P)), calc, texto: tx.paragrafo, t: tx.t,
+        vals: r.vals, fmt: r.vals.map(v => fmtVal(d, v, P)), calc, texto: tx.paragrafo, t: tx.t, evidencias: tx.ev || [],
         delta: tx.t ? (tx.t.d > 0 ? '+' : tx.t.d < 0 ? '−' : '') + fmtDelta(d, tx.t.d, P) : ''
       };
     });
@@ -647,7 +957,7 @@ const Engine = (() => {
     });
     for (const [cod, nome] of [['DRE.RL', 'receita líquida'], ['DRE.CMV', 'CMV'], ['DRE.LL', 'lucro líquido']])
       if (!caso.contas.some(c => c.cod === cod)) avisos.push(`Falta a conta de ${nome} na DRE; os índices que dependem dela não serão calculados.`);
-    return { P, indices, by, grupos, conclusao: conc, estrutura: est, avisos };
+    return { P, indices, by, grupos, conclusao: conc, estrutura: est, avisos, abertura: abertura(caso, ctx) };
   }
 
   // Monta um caso a partir de um arquivo da base CVM (data/cia/<cd>.json), para um intervalo
@@ -667,7 +977,7 @@ const Engine = (() => {
     }
     const ind = sel.filter(i => doc.periodos[i].base === 'ind').map(i => doc.periodos[i].rotulo);
     return {
-      preset: 'cvm', cd_cvm: doc.cd_cvm, empresa: doc.empresa, sinais: 'despesa_positiva',
+      preset: 'cvm', cd_cvm: doc.cd_cvm, empresa: doc.empresa, sinais: 'despesa_positiva', escala: 'mil', setor: doc.setor || '',
       fonte: doc.fonte + (ind.length ? ` Em ${lista(ind)} a empresa não publicou demonstrações consolidadas; foram usadas as individuais.` : ''),
       periodos: sel.map(i => doc.periodos[i].rotulo),
       extras: { estoqueInicial: ei, compras: [] }, contas,

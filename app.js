@@ -29,7 +29,7 @@ let BASE = null;          // empresas.json
 let DOC = null;           // arquivo da empresa escolhida na base CVM
 
 function salvar() {
-  try { localStorage.setItem(CHAVE, JSON.stringify({ caso: state.caso, params: state.params, editado: state.editado, aba: state.aba, cvm: state.cvm })); } catch (e) { }
+  try { localStorage.setItem(CHAVE, JSON.stringify({ caso: state.caso, params: state.params, editado: state.editado, aba: state.aba, cvm: state.cvm, evDoc: state.evDoc })); } catch (e) { }
 }
 function carregar() {
   try {
@@ -37,6 +37,7 @@ function carregar() {
     if (s && s.caso && Array.isArray(s.caso.contas)) {
       state.caso = s.caso; state.params = { ...E.PADRAO, ...(s.params || {}) }; state.editado = !!s.editado;
       state.cvm = s.cvm || null; if (s.aba && ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'].includes(s.aba)) state.aba = s.aba;
+      if (s.evDoc === false) state.evDoc = false;
       restaurado = true;
     }
   } catch (e) { }
@@ -492,6 +493,7 @@ let rTimer; const redesenhar = () => { clearTimeout(rTimer); rTimer = setTimeout
 window.addEventListener('resize', redesenhar);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(redesenhar);
 const roMapa = window.ResizeObserver ? new ResizeObserver(redesenhar) : null;
+document.addEventListener('change', e => { if (e.target.id === 'chk-evidencias') { state.evDoc = e.target.checked; salvar(); } });
 $('#p-mapa').addEventListener('click', e => { const b = e.target.closest('[data-mapa-k]'); if (!b) return; state.mapaK = +b.dataset.mapaK; renderMapa(); });
 
 // ---------- Demonstrações no formato da CVM ----------
@@ -624,6 +626,8 @@ function renderAnalise() {
   h += `<div class="barra-acoes"><button class="btn primario" type="button" data-copiar="tudo">Copiar análise completa</button><span class="nota">Texto gerado por regras a partir dos números. Revise antes de entregar.</span></div>`;
   h += `<div class="copia-fallback" id="copia-fallback" hidden><label for="ta-fallback" class="nota">A cópia automática foi bloqueada. Selecione e copie:</label><textarea id="ta-fallback" readonly></textarea></div>`;
   if (state.caso.fonte) h += `<p class="nota">Fonte: ${esc(state.caso.fonte)}</p>`;
+  if (R.abertura) h += `<section class="abertura"><h2>Apresentação</h2><p class="leitura">${esc(R.abertura)}</p><div class="ind-acoes"><button class="btn mini" type="button" data-copiar="abertura">Copiar parágrafo</button></div></section>`;
+  h += `<label class="check incluir-ev"><input type="checkbox" id="chk-evidencias"${state.evDoc !== false ? ' checked' : ''}> Incluir os quadros de conferência no PDF e no Word</label>`;
   for (const g of R.grupos) {
     const its = g.ids.map(id => R.by[id]);
     h += `<section class="grupo" id="g-${g.id}"><div class="grupo-cab"><h2>${esc(g.titulo)}</h2><span class="regra">${its.length} índices</span></div>`;
@@ -636,6 +640,7 @@ function renderAnalise() {
       h += `<div class="formula">${esc(i.formula)} · ${i.dir > 0 ? 'quanto maior, melhor' : 'quanto menor, melhor'}</div>`;
       h += `<div class="calculos">${i.calc.map((c, k) => `<span><b>${esc(per[k])}</b> <span${tip(tipIndice(i, k))}>${c ? esc(c) : 'não calculável'}</span></span>`).join('')}</div>`;
       h += `<p class="leitura">${esc(i.texto)}</p>`;
+      h += quadroEvidencia(i);
       h += `<div class="ind-acoes"><button class="btn mini" type="button" data-copiar="${i.id}">Copiar parágrafo</button></div></article>`;
     }
     h += `</section>`;
@@ -643,9 +648,41 @@ function renderAnalise() {
   h += `<section class="conclusao"><h2>Conclusão integrada</h2><ul>${R.conclusao.map(c => `<li>${esc(c)}</li>`).join('')}</ul></section>`;
   el.innerHTML = h;
 }
+// quadro de conferência: contas e séries citadas no texto, com a variação no período
+function linhasEvidencia(i) {
+  const per = state.caso.periodos;
+  const ids = per.map((_, k) => k);
+  return i.evidencias.map(e => {
+    const vs = e.v.map(v => v == null ? null : Number(v));
+    const k0 = ids.find(k => vs[k] != null), k1 = [...ids].reverse().find(k => vs[k] != null);
+    const ehIndice = e.fonte === 'Índice';
+    const fmt = v => v == null ? '' : ehIndice ? fmtN(v, e.nome.includes('dias') ? 0 : 2) : fmtR(v);
+    let variacao = '';
+    if (k0 != null && k1 != null && k1 > k0) {
+      const a = vs[k0], b = vs[k1];
+      if (ehIndice) variacao = (b - a >= 0 ? '+' : '−') + fmtN(Math.abs(b - a), 2);
+      else if (e.fonte === 'DFC') { let soma = 0; for (let k = k0 + 1; k <= k1; k++) soma += vs[k] || 0; variacao = `soma ${per[k0 + 1]}–${per[k1]}: ${fmtSin(soma)}`; }
+      else if (a && Math.sign(a) === Math.sign(b)) variacao = (b / a - 1 >= 0 ? '+' : '−') + fmtN(Math.abs(b / a - 1) * 100, 2) + '%';
+      else if (!a && b) variacao = 'nova';
+    }
+    return { fonte: e.fonte, nome: e.nome, vals: vs.map(fmt), variacao, k0, k1, vs };
+  });
+}
+function quadroEvidencia(i) {
+  if (!i.evidencias || !i.evidencias.length) return '';
+  const per = state.caso.periodos;
+  const ls = linhasEvidencia(i);
+  const mil = state.caso.escala === 'mil' ? ' Valores em R$ mil.' : '';
+  return `<details class="conferir"><summary>Conferir no balanço: ${ls.length} ${ls.length === 1 ? 'item citado' : 'itens citados'} no texto</summary>
+    <p class="nota">Contas e séries usadas no parágrafo, para conferir com as demonstrações.${mil}</p>
+    <div class="rolagem"><table><thead><tr><th>Fonte</th><th>Conta</th>${per.map(p => `<th class="n">${esc(p)}</th>`).join('')}<th class="n">Variação</th></tr></thead><tbody>
+    ${ls.map(l => `<tr><td class="fonte">${esc(l.fonte)}</td><td>${esc(l.nome)}</td>${l.vals.map(v => `<td class="n">${esc(v)}</td>`).join('')}<td class="n">${l.variacao && l.k0 != null && l.fonte !== 'DFC' && l.variacao !== 'nova' ? `<span${tip({ titulo: `${l.nome}: variação`, formula: l.fonte === 'Índice' ? `valor de ${per[l.k1]} − valor de ${per[l.k0]}` : `(valor de ${per[l.k1]} ÷ valor de ${per[l.k0]} − 1) × 100`, conta: `${l.vals[l.k1]} ${l.fonte === 'Índice' ? '−' : '÷'} ${l.vals[l.k0]}${l.fonte === 'Índice' ? '' : ' − 1'} → ${l.variacao}` })}>${esc(l.variacao)}</span>` : esc(l.variacao)}</td></tr>`).join('')}
+    </tbody></table></div></details>`;
+}
 function textoCompleto() {
   const L = [`Análise das demonstrações contábeis: ${state.caso.empresa || 'Empresa'}`, ''];
   if (state.caso.fonte) L.push('Fonte: ' + state.caso.fonte, '');
+  if (R.abertura) L.push(R.abertura, '');
   for (const g of R.grupos) {
     L.push(g.titulo.toUpperCase(), g.sintese, '');
     for (const id of g.ids) { const i = R.by[id]; L.push(`${i.id}: ${nomeIndice(i)}`, i.texto, ''); }
@@ -868,13 +905,20 @@ async function documentoDaAba() {
   const par = (t, nota) => B.push({ t: 'p', texto: t, nota });
   const tab = (cab, linhas, o = {}) => B.push({ t: 'tab', cab, linhas, dir: o.dir || [], neg: o.neg || [], recuo: o.recuo || [], larga: o.larga });
   if (aba === 'analise') {
+    if (R.abertura) { sub('Apresentação'); par(R.abertura); }
     for (const g of R.grupos) {
       const its = g.ids.map(id => R.by[id]);
       sub(g.titulo);
       tab(['Índice', 'Fórmula', ...per, 'Evolução'], its.map(i => [`${nomeIndice(i)} (${i.id})`, i.formula, ...i.fmt, i.t ? (i.t.est ? 'estável' : `${i.delta} (${i.t.melhora ? 'melhora' : 'piora'})`) : '']),
         { dir: per.map((_, k) => k + 2) });
       par(g.sintese, true);
-      for (const i of its) { h3(`${nomeIndice(i)} (${i.id})`); par(i.texto); }
+      for (const i of its) {
+        h3(`${nomeIndice(i)} (${i.id})`); par(i.texto);
+        if (state.evDoc !== false && i.evidencias.length) {
+          const ls = linhasEvidencia(i);
+          tab(['Fonte', 'Conta', ...per, 'Variação'], ls.map(l => [l.fonte, l.nome, ...l.vals, l.variacao]), { dir: per.map((_, k) => k + 2).concat(per.length + 2) });
+        }
+      }
     }
     sub('Conclusão integrada');
     R.conclusao.forEach(c => par('• ' + c));
@@ -1114,7 +1158,7 @@ document.querySelector('nav.abas').addEventListener('click', e => { const b = e.
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-copiar]'); if (!b) return;
   const k = b.dataset.copiar;
-  copiar(k === 'tudo' ? textoCompleto() : R.by[k].texto, k === 'tudo' ? 'Análise' : 'Parágrafo');
+  copiar(k === 'tudo' ? textoCompleto() : k === 'abertura' ? R.abertura : R.by[k].texto, k === 'tudo' ? 'Análise' : 'Parágrafo');
 });
 
 carregar();

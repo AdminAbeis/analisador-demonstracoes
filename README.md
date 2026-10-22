@@ -52,6 +52,33 @@ CVM (dados.cvm.gov.br)                     GitHub Actions, toda segunda-feira
 | `tests/engine.test.js` | Testes do motor (gabarito da Cia Grega, coerência CVM × WEG digitada, DFC e detalhe dos cálculos) |
 | `.github/workflows/publicar.yml` | Roda os testes, atualiza os dados e publica o site |
 
+## Como o texto de cada índice é montado
+
+O texto segue o método da Profa. Isabel: índice → fórmula → balanço → explicação. Todas as regras valem para qualquer empresa, porque usam o código de cada conta no plano do sistema, o nome da conta e as taxas de crescimento; nada é específico de uma companhia.
+
+1. **Valores e evolução:** os valores de cada ano, a variação no período e a variação ano a ano.
+2. **Fórmula:** se o numerador ou o denominador explica o movimento, e em que proporção.
+3. **Contas do balanço:** as contas que mais variaram em cada lado, em reais, marcando contas que surgiram, zeraram ou mais que dobraram.
+4. **Natureza das contas:** o que cada conta citada significa (dívida com juros, adiantamento de clientes, dividendos a pagar, fornecedores, estoques…), explicada uma única vez na análise.
+5. **Cruzamentos próprios de cada índice:**
+
+| Índice | Cruzamento |
+|---|---|
+| LI | Fontes e usos de caixa pela DFC: operação, investimentos, aquisições, dividendos e empréstimos |
+| LC, LS | Estoques × custo das vendas e clientes × receita |
+| PCT, CE | Quanto do aumento das dívidas tem juros e quanto não tem |
+| IPL | Crescimento do imobilizado e do intangível × compras de ativos e aquisições de empresas na DFC |
+| PCT, IPL, RPL | Capital social × reservas de lucros (incorporação de reservas ao capital) |
+| RA | Margem × giro (RA = ML × GA) |
+| RPL | Rentabilidade do ativo × alavancagem (ativo ÷ PL) e lucro × variação do PL × dividendos pagos |
+| PMRE, PMRV, PMPC | Estoques, clientes e fornecedores × CMV e receita, com o giro em vezes por ano |
+| CF | Necessidade de capital de giro (clientes + estoques − fornecedores) × capital circulante líquido |
+| Todos (3 anos ou mais) | Causa do último ano quando ela é diferente da causa do período todo |
+
+6. **Julgamento e leitura do índice**, como no modelo da Cia Grega.
+
+Abaixo de cada parágrafo, o quadro **Conferir no balanço** lista as contas e séries citadas, com os valores de cada ano e a variação, para que o texto possa ser conferido ao lado das demonstrações. A análise abre com um parágrafo de apresentação (empresa, setor da CVM, período, receita, ativo e lucro).
+
 ## Colocar no ar (uma vez)
 
 1. Crie um repositório **público** no GitHub, por exemplo `analisador-demonstracoes`. O GitHub Pages é gratuito para repositórios públicos.
