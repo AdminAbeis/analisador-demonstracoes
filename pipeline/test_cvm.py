@@ -339,6 +339,7 @@ def main():
     checa(dfc.get("DFC.LUC", {}).get("nome") == "Lucro antes dos impostos" and dfc["DFC.LUC"]["v"] == [6590797, 7908508, 8147677], "ponto de partida da DFC")
     checa(dfc.get("DFC.CAPEX", {}).get("v") == [-1658625, -1850322, -2691321], f"CAPEX: {dfc.get('DFC.CAPEX')}")
     checa(dfc.get("DFC.DIV", {}).get("v") == [-2308620, -2934611, -5384769], f"dividendos pagos: {dfc.get('DFC.DIV')}")
+    checa(dfc.get("DFC.AQ", {}).get("v") == [-78998, -2263748, -200575], f"aquisições: {dfc.get('DFC.AQ')}")
     checa(dfc.get("DFC.EMP", {}).get("v") == [-617584, 162270, 1017651], f"empréstimos líquidos: {dfc.get('DFC.EMP')}")
     checa(all(p["dfc"] == "indireto" for p in w["periodos"]), "método da DFC")
     comp = json.load(open(os.path.join(saida, "dfp", "5410.json"), encoding="utf-8"))

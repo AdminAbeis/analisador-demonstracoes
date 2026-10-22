@@ -386,13 +386,17 @@ def resumo_dfc(lista_contas):
                  and any(k in sem_acento(contas[c][0]) for k in ("AQUISI", "ADICO", "ADICA", "COMPRA", "INVESTIMENTO EM", "AUMENTO D"))]
         if capex:
             put("DFC.CAPEX", "Aquisição de imobilizado e intangível (CAPEX)", ",".join(capex), i, sum(contas[c][1] for c in capex))
+        aq = [c for c in filhos("6.02") if "AQUISI" in sem_acento(contas[c][0]) and c not in capex
+              and any(k in sem_acento(contas[c][0]) for k in ("EMPRESA", "CONTROLAD", "COMBINA", "PARTICIPA", "SUBSIDI", "COLIGAD", "NEGOCIO"))]
+        if aq:
+            put("DFC.AQ", "Aquisição de empresas e participações", ",".join(aq), i, sum(contas[c][1] for c in aq))
         emp = [c for c in filhos("6.03") if any(k in sem_acento(contas[c][0]) for k in ("EMPREST", "FINANCIAM", "DEBENT"))]
         if emp:
             put("DFC.EMP", "Empréstimos: captações menos pagamentos", ",".join(emp), i, sum(contas[c][1] for c in emp))
         div = [c for c in filhos("6.03") if any(k in sem_acento(contas[c][0]) for k in ("DIVIDEN", "CAPITAL PROPRIO", "JCP"))]
         if div:
             put("DFC.DIV", "Dividendos e JCP pagos", ",".join(div), i, sum(contas[c][1] for c in div))
-    ordem = ["DFC.LUC", "DFC.DEP", "DFC.OPG", "DFC.VCG", "DFC.OP", "DFC.CAPEX", "DFC.INV", "DFC.EMP", "DFC.DIV",
+    ordem = ["DFC.LUC", "DFC.DEP", "DFC.OPG", "DFC.VCG", "DFC.OP", "DFC.CAPEX", "DFC.AQ", "DFC.INV", "DFC.EMP", "DFC.DIV",
              "DFC.FIN", "DFC.CAMB", "DFC.VAR", "DFC.INI", "DFC.FIM"]
     return [linhas[c] for c in ordem if c in linhas]
 
