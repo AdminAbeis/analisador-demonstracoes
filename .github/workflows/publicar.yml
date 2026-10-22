@@ -39,7 +39,7 @@ jobs:
       - name: Baixar e processar as DFPs da CVM
         run: |
           mkdir -p _site
-          cp index.html app.js engine.js exemplos.js _site/
+          cp index.html app.js engine.js _site/
           touch _site/.nojekyll
           python pipeline/cvm.py --saida _site/data
           du -sh _site/data
