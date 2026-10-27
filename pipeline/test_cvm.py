@@ -286,14 +286,18 @@ def gerar_fixture(pasta):
         gravar_zip(pasta, ano, blocos)
     # cadastro
     with open(os.path.join(pasta, "cad_cia_aberta.csv"), "w", encoding="iso-8859-1", newline="") as f:
-        f.write("CNPJ_CIA;DENOM_SOCIAL;DENOM_COMERC;CD_CVM;SIT;SETOR_ATIV\n")
-        f.write("84.429.695/0001-11;WEG S.A.;WEG;5410;ATIVO;Máquinas, Equipamentos, Veículos e Peças\n")
-        f.write("00.000.000/0002-72;BANCO TESTE S.A.;BANCO TESTE;90002;ATIVO;Bancos\n")
-    # códigos de negociação
-    s = "CNPJ_Companhia;Valor_Mobiliario;Mercado;Codigo_Negociacao;Data_Fim_Negociacao\n" \
-        "84.429.695/0001-11;Ações Ordinárias;Bolsa;WEGE3;\n"
+        f.write("CNPJ_CIA;DENOM_SOCIAL;DENOM_COMERC;DT_REG;DT_CONST;CD_CVM;SIT;SETOR_ATIV;CONTROLE_ACIONARIO;MUN;UF;AUDITOR;SIT_EMISSOR\n")
+        f.write("84.429.695/0001-11;WEG S.A.;WEG;1971-08-04;1961-09-16;5410;ATIVO;Máquinas, Equipamentos, Veículos e Peças;"
+                "PRIVADO;JARAGUÁ DO SUL;SC;AUDITORIA TESTE;FASE OPERACIONAL\n")
+        f.write("00.000.000/0002-72;BANCO TESTE S.A.;BANCO TESTE;;;90002;ATIVO;Bancos;;;;;\n")
+    # códigos de negociação, segmento e dados gerais
+    s = "CNPJ_Companhia;Valor_Mobiliario;Mercado;Codigo_Negociacao;Data_Fim_Negociacao;Segmento;Data_Fim_Listagem\n" \
+        "84.429.695/0001-11;Ações Ordinárias;Bolsa;WEGE3;;Novo Mercado;\n"
+    g = "CNPJ_Companhia;Nome_Empresarial;Data_Constituicao;Especie_Controle_Acionario;Pagina_Web\n" \
+        "84.429.695/0001-11;WEG S.A.;16/09/1961;Privado;www.weg.net/ri\n"
     with zipfile.ZipFile(os.path.join(pasta, "fca_cia_aberta_2025.zip"), "w") as z:
         z.writestr("fca_cia_aberta_valor_mobiliario_2025.csv", s.encode("iso-8859-1"))
+        z.writestr("fca_cia_aberta_geral_2025.csv", g.encode("iso-8859-1"))
 
 
 def main():
@@ -316,6 +320,12 @@ def main():
     checa(not os.path.exists(os.path.join(saida, "cia", "90002.json")), "banco não deveria ter arquivo")
 
     w = json.load(open(os.path.join(saida, "cia", "5410.json"), encoding="utf-8"))
+    pf = w.get("perfil", {})
+    checa(pf.get("fundacao") == "1961-09-16" and pf.get("sede") == "Jaraguá do Sul, SC" and pf.get("segmento") == "Novo Mercado"
+          and pf.get("site") == "www.weg.net/ri" and pf.get("controle") == "Privado" and pf.get("tickers") == ["WEGE3"],
+          f"perfil WEG: {pf}")
+    f1 = json.load(open(os.path.join(saida, "cia", "90001.json"), encoding="utf-8")).get("perfil", {})
+    checa(set(f1) <= {"razao", "tickers"}, f"perfil sem cadastro só tem o nome: {f1}")
     soma = lambda pref, i: sum(c["v"][i] or 0 for c in w["contas"] if c["cod"].startswith(pref))
     for i, tot in enumerate([31496270, 41489701, 42645030]):
         checa(abs(soma("AC.", i) + soma("ANC.", i) - tot) < 1, f"WEG ativo {i}")

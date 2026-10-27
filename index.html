@@ -38,10 +38,15 @@
 html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55; }
 .wrap { max-width: 920px; margin: 0 auto; padding-inline: 16px; }
-header.topo { padding-block: 26px 16px; display: grid; gap: 12px; }
-.eyebrow { font-family: var(--f-num); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(28px, 6vw, 42px); line-height: 1.05; margin: 0; text-wrap: balance; letter-spacing: -.01em; }
-.meta { color: var(--muted); font-size: 13.5px; max-width: 72ch; margin: 0; }
+header.topo { padding-block: 18px 12px; display: grid; gap: 12px; }
+header.topo > .wrap { width: 100%; }
+.cab { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 20px; }
+.cab-id { display: grid; gap: 4px; min-width: 0; flex: 1 1 380px; }
+.cab-acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cab-acoes .btn { min-height: 38px; }
+.eyebrow { font-family: var(--f-num); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(26px, 5vw, 36px); line-height: 1.05; margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+.meta { color: var(--muted); font-size: 13.5px; margin: 0; }
 select, input[type=text], input[type=search], textarea {
   font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 6px; padding: 7px 10px; min-width: 0;
 }
@@ -58,10 +63,9 @@ select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-
 label.arquivo { position: relative; overflow: hidden; }
 label.arquivo input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
 
-/* barra da empresa */
-.empresa-barra { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 12px; }
-.linha-busca { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.linha-busca input { width: 100%; font-size: 15.5px; padding: 9px 12px; }
+/* troca de empresa */
+.empresa-barra { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px; display: grid; gap: 10px; }
+.empresa-barra input { width: 100%; font-size: 15.5px; padding: 9px 12px; }
 .resultados { list-style: none; margin: 0; padding: 0; display: grid; border: 1px solid var(--rule); border-radius: 8px; max-height: 340px; overflow-y: auto; }
 .resultados li + li { border-top: 1px solid var(--rule); }
 .resultados button { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 12px; cursor: pointer; }
@@ -71,15 +75,24 @@ label.arquivo input { position: absolute; inset: 0; opacity: 0; cursor: pointer;
 .res-nome { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .res-tick { font-family: var(--f-num); font-size: 12.5px; color: var(--accent); white-space: nowrap; }
 .res-info { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
-.periodos { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
-.periodos label { font-size: 13.5px; color: var(--muted); }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.periodos { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); }
+.periodos select { padding: 3px 6px; font-size: 13.5px; font-family: var(--f-num); }
 .status-base { font-size: 12.5px; color: var(--muted); }
-.linha-ferramentas { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; justify-content: space-between; }
-.grupo-ferr { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-#exportar { display: contents; }
-#exportar[hidden] { display: none !important; }
-.rot-ferr { font-size: 13px; color: var(--muted); }
 .so-impressao { display: none; }
+
+/* menus do cabeçalho */
+.menu { position: relative; }
+.seta { width: 10px; height: 6px; }
+.menu > .btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.menu-lista { position: absolute; right: 0; top: calc(100% + 6px); z-index: 12; min-width: 220px; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,.14); padding: 6px; display: grid; gap: 1px; }
+.menu-lista button, .menu-lista label.arquivo { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 8px 10px; border-radius: 6px; font-size: 14px; cursor: pointer; position: relative; overflow: hidden; }
+.menu-lista button:hover, .menu-lista label.arquivo:hover, .menu-lista button:focus-visible { background: var(--accent-soft); outline: none; }
+.menu-lista label.arquivo:focus-within { background: var(--accent-soft); }
+.menu-lista hr { border: 0; border-top: 1px solid var(--rule); margin: 4px 2px; }
+.menu-rot { font-family: var(--f-num); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 10px 4px; }
+#exportar { display: grid; gap: 1px; }
+@media (max-width: 560px) { .menu-lista { right: auto; left: 0; } #menu-mais .menu-lista { left: auto; right: 0; } }
 
 nav.abas { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--rule); }
 nav.abas .wrap { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
@@ -148,7 +161,7 @@ legend { font-family: var(--f-display); font-weight: 600; font-size: 16px; paddi
 .campo label { font-size: 14px; }
 .campo small { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
 .campo select, .campo input { width: 100%; }
-@media (max-width: 560px) { .campo, .linha-busca { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .campo { grid-template-columns: minmax(0, 1fr); } }
 
 .ok { color: var(--good); font-weight: 600; }
 .falha { color: var(--bad); font-weight: 600; }
@@ -161,7 +174,6 @@ footer.rodape a { color: var(--accent); }
 [data-tip] { text-decoration: underline dotted var(--rule-strong); text-decoration-thickness: 1.5px; text-underline-offset: 3px; cursor: help; border-radius: 3px; }
 [data-tip]:hover, [data-tip][aria-describedby] { background: var(--accent-soft); text-decoration-color: var(--accent); }
 .sublinhado { text-decoration: underline dotted var(--rule-strong); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
-.dica-aviso { margin-top: -2px; }
 .dica { position: fixed; z-index: 30; max-width: min(400px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; background: var(--tip-bg); color: var(--tip-ink); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.45; box-shadow: 0 6px 24px rgba(0,0,0,.25); pointer-events: auto; }
 .dica.folha { left: 0 !important; right: 0; top: auto !important; bottom: 0; max-width: none; border-radius: 14px 14px 0 0; padding: 16px 16px calc(18px + env(safe-area-inset-bottom, 0px)); max-height: 62vh; overflow-y: auto; font-size: 14px; }
 .dica-fechar { float: right; font: inherit; font-size: 22px; line-height: 1; background: none; border: 0; color: var(--tip-ink); cursor: pointer; padding: 0 4px 4px 12px; }
@@ -214,9 +226,26 @@ footer.rodape a { color: var(--accent); }
 @media (max-width: 899px) { .est-svg { display: none; } }
 @media (max-width: 520px) { .bp-colunas { grid-template-columns: minmax(0, 1fr); } .bp-colunas > div + div { border-left: 0; border-top: 2px solid var(--rule); } }
 
+/* porta de entrada (site com senha) */
+html.trancado body > header, html.trancado body > nav, html.trancado body > main, html.trancado body > footer { display: none; }
+.porta { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.porta-caixa { width: min(380px, 100%); background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 24px 22px; display: grid; gap: 14px; }
+.porta-caixa h1 { font-size: 28px; }
+.porta-campo { display: grid; gap: 4px; font-size: 13.5px; color: var(--muted); }
+.porta-campo input { font: inherit; font-size: 16px; padding: 9px 12px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 6px; }
+.porta-caixa .check { font-size: 13.5px; }
+.porta-caixa .btn { justify-content: center; padding: 10px 12px; }
+.porta-erro { color: var(--bad); font-size: 13.5px; min-height: 1.2em; }
+
 /* abertura e quadro de conferência */
 .abertura { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px; }
 .incluir-ev { font-size: 13px; }
+.ficha { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 20px; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
+.ficha div { min-width: 0; }
+@media (max-width: 560px) { .ficha { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; } }
+.ficha dt { font-family: var(--f-num); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.ficha dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.ficha a { color: var(--accent); }
 details.conferir { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); min-width: 0; }
 article.indice > * { min-width: 0; }
 details.conferir > summary { cursor: pointer; padding: 8px 12px; font-size: 13.5px; color: var(--accent); font-weight: 500; list-style-position: inside; }
@@ -238,8 +267,9 @@ details.conferir td.fonte { font-family: var(--f-num); font-size: 11.5px; color:
 @page largo { size: A4 landscape; margin: 10mm; }
 @media print {
   :root, :root:not([data-theme="light"]), :root[data-theme="dark"] { --paper: #F2F4F1; --surface: #FFFFFF; --ink: #17201C; --muted: #56645E; --rule: #D6DDD8; --rule-strong: #A9B5AE; --accent: #0D6656; --accent-soft: #DCEDE8; --accent-ink: #FFFFFF; --good: #2B7537; --good-soft: #E0EFE2; --bad: #A93D29; --bad-soft: #F6E2DC; --flat: #66716B; --flat-soft: #E7EBE8; --warn-soft: #FBF1DC; --warn: #8A5A00; --lig1: #C2611A; --lig2: #2F6FC4; --lig3: #2E8B4E; --tip-bg: #17201C; --tip-ink: #F2F4F1; --tip-muted: #B9C4BE; --tip-rule: #3A4741; color-scheme: light; }
-  nav.abas, .empresa-barra, .linha-ferramentas, .barra-acoes, .ind-acoes, .toast, .dica, .dica-aviso, footer.rodape, .copia-fallback, .seletor, .incluir-ev, details.conferir { display: none !important; }
+  nav.abas, #painel-busca, .cab-acoes, .periodos, .barra-acoes, .ind-acoes, .toast, .dica, footer.rodape, .copia-fallback, .seletor, .incluir-ev, details.conferir { display: none !important; }
   .so-impressao { display: block; font-size: 10pt; color: #444; }
+  span.so-impressao { display: inline; }
   body { background: #fff; color: #000; font-size: 10.5pt; }
   header.topo { padding-block: 0 8px; }
   main { padding-block: 8px 0; }
@@ -258,43 +288,55 @@ details.conferir td.fonte { font-family: var(--f-num); font-size: 11.5px; color:
 </head>
 <body>
 
-<header class="topo wrap">
-  <div class="eyebrow">Análise das demonstrações contábeis</div>
-  <h1 id="titulo-empresa">Carregando…</h1>
-  <p class="meta" id="meta-caso"></p>
-
-  <section class="empresa-barra" aria-label="Escolher empresa">
-    <div class="linha-busca">
-      <input type="search" id="busca" placeholder="Buscar empresa: nome, código (WEGE3) ou CNPJ" autocomplete="off" aria-describedby="status-base" aria-controls="resultados">
+<header class="topo">
+  <div class="wrap cab">
+    <div class="cab-id">
+      <div class="eyebrow">Analisador de demonstrações</div>
+      <h1 id="titulo-empresa">Carregando…</h1>
+      <div class="meta">
+        <span class="periodos" id="periodos" hidden>
+          <select id="per-de" aria-label="Primeiro exercício"></select><span>a</span><select id="per-ate" aria-label="Último exercício"></select>
+        </span>
+        <span id="meta-caso"></span>
+      </div>
     </div>
-    <ul class="resultados" id="resultados" hidden></ul>
-    <div class="periodos" id="periodos" hidden>
-      <label for="per-de">De</label><select id="per-de"></select>
-      <label for="per-ate">até</label><select id="per-ate"></select>
-      <span class="status-base" id="info-periodos"></span>
+    <div class="cab-acoes">
+      <button class="btn" id="btn-trocar" type="button" aria-expanded="false" aria-controls="painel-busca">Trocar empresa</button>
+      <div class="menu" id="menu-exportar">
+        <button class="btn" type="button" aria-haspopup="true" aria-expanded="false">Exportar<svg class="seta" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+        <div class="menu-lista" hidden>
+          <p class="menu-rot" id="rot-exportar">Aba aberta</p>
+          <div id="exportar" hidden>
+            <button type="button" id="btn-pdf">PDF</button>
+            <button type="button" id="btn-word">Word</button>
+            <button type="button" id="btn-csv">CSV</button>
+            <button type="button" id="btn-imprimir">Imprimir</button>
+          </div>
+          <hr>
+          <button type="button" id="btn-copiar-csv">Copiar tabela (CSV)</button>
+          <button type="button" id="btn-json" hidden>Salvar caso (.json)</button>
+        </div>
+      </div>
+      <div class="menu" id="menu-mais">
+        <button class="btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções" title="Mais opções"><svg viewBox="0 0 16 4" width="16" height="4" aria-hidden="true"><circle cx="2" cy="2" r="1.6" fill="currentColor"/><circle cx="8" cy="2" r="1.6" fill="currentColor"/><circle cx="14" cy="2" r="1.6" fill="currentColor"/></svg></button>
+        <div class="menu-lista" hidden>
+          <label class="arquivo" for="arq-importar">Importar CSV ou JSON<input type="file" id="arq-importar" accept=".csv,.json,.txt,text/csv,application/json"></label>
+          <button type="button" id="btn-branco">Novo caso em branco</button>
+          <hr class="so-admin" hidden>
+          <button type="button" id="btn-link" class="so-admin" hidden>Copiar link de leitura</button>
+          <button type="button" id="btn-sair" hidden>Sair</button>
+        </div>
+      </div>
     </div>
-    <p class="status-base" id="status-base">Carregando a lista de companhias…</p>
-  </section>
-  <p class="nota dica-aviso">Passe o mouse ou toque nos valores <span class="sublinhado">sublinhados</span> para ver a fórmula e o cálculo.</p>
-
-  <div class="linha-ferramentas">
-    <span class="grupo-ferr">
-      <label class="btn arquivo" for="arq-importar">Importar CSV ou JSON<input type="file" id="arq-importar" accept=".csv,.json,.txt,text/csv,application/json"></label>
-      <button class="btn" id="btn-branco" type="button">Novo caso em branco</button>
-    </span>
-    <span class="grupo-ferr">
-      <span class="rot-ferr" id="rot-exportar">Exportar a aba aberta:</span>
-      <span id="exportar" hidden>
-        <button class="btn" id="btn-pdf" type="button">PDF</button>
-        <button class="btn" id="btn-word" type="button">Word</button>
-        <button class="btn" id="btn-csv" type="button">CSV</button>
-        <button class="btn" id="btn-imprimir" type="button">Imprimir</button>
-      </span>
-      <button class="btn" id="btn-copiar-csv" type="button">Copiar CSV</button>
-      <button class="btn" id="btn-json" type="button" hidden>Salvar caso (.json)</button>
-    </span>
   </div>
-  <p class="so-impressao" id="imp-aba"></p>
+  <section class="wrap" id="painel-busca" aria-label="Escolher empresa" hidden>
+    <div class="empresa-barra">
+      <input type="search" id="busca" placeholder="Nome, código (WEGE3) ou CNPJ" autocomplete="off" aria-describedby="status-base" aria-controls="resultados">
+      <ul class="resultados" id="resultados" hidden></ul>
+      <p class="status-base" id="status-base">Carregando a lista de companhias…</p>
+    </div>
+  </section>
+  <p class="so-impressao wrap" id="imp-aba"></p>
 </header>
 
 <nav class="abas" aria-label="Seções">

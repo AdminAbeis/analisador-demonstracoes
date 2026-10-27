@@ -5,7 +5,14 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtN = E.fmtN;
 const clone = o => JSON.parse(JSON.stringify(o));
-const CHAVE = 'analisador-dc-v3';
+// Acesso: sem senha (site aberto), administrador ou leitura. window.ACESSO é definido por porta.js
+// quando o site é publicado com senha (pipeline/proteger.js).
+const ACESSO = window.ACESSO || null;
+const LEITURA = !!ACESSO && ACESSO.modo === 'leitura';
+const ADMIN = !!ACESSO && ACESSO.modo === 'admin';
+const CHAVE = LEITURA ? 'analisador-dc-leitura' : 'analisador-dc-v3';
+const CHAVE_LINK = 'analisador-dc-link';
+let LINK = null;          // análise fixada pelo link de leitura: { c, de, ate, p }
 const CD_INICIAL = '5410'; // WEG: empresa aberta na primeira visita
 const BASE_URL = 'data/';
 // Fora do Claude (GitHub Pages, servidor local ou arquivo aberto no computador) os downloads funcionam.
@@ -34,6 +41,11 @@ function salvar() {
 function carregar() {
   try {
     const s = JSON.parse(localStorage.getItem(CHAVE) || 'null');
+    if (LEITURA) {
+      if (s && ['analise', 'mapa', 'demo', 'estrutura'].includes(s.aba)) state.aba = s.aba;
+      if (s && s.evDoc === false) state.evDoc = false;
+      return;
+    }
     if (s && s.caso && Array.isArray(s.caso.contas)) {
       state.caso = s.caso; state.params = { ...E.PADRAO, ...(s.params || {}) }; state.editado = !!s.editado;
       state.cvm = s.cvm || null; if (s.aba && ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'].includes(s.aba)) state.aba = s.aba;
@@ -96,7 +108,8 @@ async function carregarBase() {
       ? `Base de demonstração com ${n} companhia. A base completa, com todas as companhias abertas, é gerada pela atualização semanal no GitHub.`
       : `${n.toLocaleString('pt-BR')} companhias abertas com balanço e DRE na CVM (${faixaAnos()}), atualizado em ${data}.`;
     $('#rodape').innerHTML = `Dados: <a href="https://dados.cvm.gov.br/dataset/cia_aberta-doc-dfp" target="_blank" rel="noopener">CVM, Portal de Dados Abertos</a> (licença ODbL). Os textos são gerados por regras e devem ser revisados antes de entregar.`;
-    if (state.cvm && state.caso.preset === 'cvm') abrirEmpresa(state.cvm.c, state.cvm.de, state.cvm.ate, true);
+    if (LINK) abrirEmpresa(LINK.c, LINK.de, LINK.ate, true);
+    else if (state.cvm && state.caso.preset === 'cvm') abrirEmpresa(state.cvm.c, state.cvm.de, state.cvm.ate, true);
     else if (!restaurado) {
       const ini = BASE.empresas.find(e => e.c === CD_INICIAL && !e.fin) || BASE.empresas.find(e => !e.fin && e.a.length);
       if (ini) abrirEmpresa(ini.c, null, null, true);
@@ -137,8 +150,32 @@ $('#busca').addEventListener('keydown', e => {
 $('#resultados').addEventListener('click', e => {
   const b = e.target.closest('button[data-cd]'); if (!b || b.getAttribute('aria-disabled') === 'true') return;
   $('#resultados').hidden = true; $('#busca').value = '';
+  painelBusca(false);
   abrirEmpresa(b.dataset.cd);
 });
+// painel de troca de empresa
+function painelBusca(abrir) {
+  const p = $('#painel-busca'), b = $('#btn-trocar');
+  p.hidden = !abrir; b.setAttribute('aria-expanded', String(!!abrir));
+  if (abrir) { fecharMenus(); $('#busca').focus(); }
+}
+$('#btn-trocar').addEventListener('click', () => painelBusca($('#painel-busca').hidden));
+$('#painel-busca').addEventListener('keydown', e => { if (e.key === 'Escape' && $('#resultados').hidden) { painelBusca(false); $('#btn-trocar').focus(); } });
+// menus Exportar e Mais
+function fecharMenus(exceto) {
+  document.querySelectorAll('.menu').forEach(m => {
+    if (m === exceto) return;
+    m.querySelector('.menu-lista').hidden = true; m.querySelector(':scope > .btn').setAttribute('aria-expanded', 'false');
+  });
+}
+document.querySelectorAll('.menu').forEach(m => {
+  const b = m.querySelector(':scope > .btn'), l = m.querySelector('.menu-lista');
+  b.addEventListener('click', () => { const abrir = l.hidden; fecharMenus(m); l.hidden = !abrir; b.setAttribute('aria-expanded', String(abrir)); });
+  l.addEventListener('click', e => { if (e.target.closest('button')) fecharMenus(); });
+  l.addEventListener('change', () => fecharMenus());
+});
+document.addEventListener('click', e => { if (!e.target.closest('.menu')) fecharMenus(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharMenus(); });
 async function abrirEmpresa(cd, de, ate, silencioso) {
   const st = $('#status-base');
   try {
@@ -149,6 +186,10 @@ async function abrirEmpresa(cd, de, ate, silencioso) {
       DOC = await r.json();
     }
     const n = DOC.periodos.length;
+    // o link de leitura guarda os anos (rótulos), que não mudam quando a base ganha um ano novo
+    const pos = r => { const i = DOC.periodos.findIndex(p => p.rotulo === r); return i < 0 ? null : i; };
+    if (typeof de === 'string') de = pos(de);
+    if (typeof ate === 'string') ate = pos(ate);
     if (ate == null || ate >= n) ate = n - 1;
     if (de == null || de > ate) de = Math.max(0, ate - 2);
     montarPeriodos(de, ate);
@@ -158,20 +199,19 @@ async function abrirEmpresa(cd, de, ate, silencioso) {
     if (!silencioso) { irAba('analise'); toast('Demonstrações carregadas'); }
   } catch (err) {
     st.textContent = 'Não foi possível carregar as demonstrações desta companhia. Tente novamente.';
+    toast('Não foi possível carregar as demonstrações');
   }
 }
 function montarPeriodos(de, ate) {
   const ops = DOC.periodos.map((p, i) => `<option value="${i}">${esc(p.rotulo)}</option>`).join('');
   $('#per-de').innerHTML = ops; $('#per-ate').innerHTML = ops;
   $('#per-de').value = String(de); $('#per-ate').value = String(ate);
-  $('#periodos').hidden = false;
+  $('#periodos').hidden = LEITURA;
 }
 function aplicarEmpresa(de, ate) {
   state.caso = E.casoDaBase(DOC, de, ate);
   state.cvm = { c: DOC.cd_cvm, de, ate };
   state.editado = false;
-  const qtd = ate - de + 1;
-  $('#info-periodos').textContent = `${qtd} ${qtd === 1 ? 'exercício' : 'exercícios'}` + (state.caso.extras.estoqueInicial !== '' ? ` · estoque de ${DOC.periodos[de - 1].rotulo} usado para o PMPC do primeiro ano` : '');
   recalcular(); renderDados();
 }
 ['#per-de', '#per-ate'].forEach(id => $(id).addEventListener('change', () => {
@@ -603,8 +643,11 @@ function recalcular() {
   const p = state.caso.periodos;
   const padrao = JSON.stringify(state.params) === JSON.stringify(E.PADRAO);
   const origem = state.caso.preset === 'cvm' ? 'dados da CVM, R$ mil' : 'dados próprios';
-  $('#meta-caso').textContent = `${p.length} ${p.length === 1 ? 'período' : 'períodos'} (${p[0]}${p.length > 1 ? ' a ' + p[p.length - 1] : ''}) · ${origem} · ${state.caso.contas.length} contas · parâmetros ${padrao ? 'no padrão da Profa. Isabel' : 'personalizados'}${state.editado ? ' · dados editados' : ''}`;
-  if (state.caso.preset !== 'cvm') $('#periodos').hidden = true;
+  const cvm = state.caso.preset === 'cvm';
+  if (!cvm) $('#periodos').hidden = true;
+  const faixa = `${p[0]}${p.length > 1 ? ' a ' + p[p.length - 1] : ''}`;
+  const per = cvm && LEITURA ? `${esc(faixa)} · ` : cvm ? `<span class="so-impressao">${esc(faixa)} · </span>` : `${esc(`${p.length} ${p.length === 1 ? 'período' : 'períodos'} (${faixa})`)} · `;
+  $('#meta-caso').innerHTML = per + esc(`${origem} · parâmetros ${padrao ? 'padrão' : 'personalizados'}${state.editado ? ' · dados editados' : ''}`);
   TIPS.clear(); esconderDica();
   renderAnalise(); renderMapa(); renderEstrutura(); renderDemo();
   salvar();
@@ -618,15 +661,41 @@ function chip(i) {
   return `<span class="chip ${i.t.melhora ? 'bom' : 'ruim'}"${tip(tipEvolucao(i))}>${seta} ${esc(i.delta.replace(/^[+−]/, ''))} · ${i.t.melhora ? 'melhora' : 'piora'}</span>`;
 }
 const nomeIndice = i => { const n = i.nome.replace(/^(o|a) /, ''); return n[0].toUpperCase() + n.slice(1); };
+// Ficha da empresa com os dados cadastrais da CVM (só os campos que existem).
+const dataBR = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d.split('-').reverse().join('/') : (d || '');
+const capitaliza = t => t ? t[0].toUpperCase() + t.slice(1).toLowerCase() : '';
+function fichaEmpresa() {
+  const pf = state.caso.perfil; if (!pf) return [];
+  const L = [];
+  if (pf.razao) L.push(['Razão social', pf.razao]);
+  if (pf.setor || state.caso.setor) L.push(['Setor (CVM)', pf.setor || state.caso.setor]);
+  if (pf.fundacao) L.push(['Constituição', dataBR(pf.fundacao)]);
+  if (pf.sede) L.push(['Sede', pf.sede.replace(/,\s*([A-Z]{2})$/, ' ($1)')]);
+  const ctrl = E.controleTxt(pf.controle); if (ctrl) L.push(['Controle acionário', capitaliza(ctrl)]);
+  const tk = (pf.tickers || []).join(', ');
+  if (pf.segmento || tk) L.push(['Ações na B3', [pf.segmento, tk].filter(Boolean).join(' · ')]);
+  if (pf.registro) L.push(['Registro na CVM', 'desde ' + dataBR(pf.registro)]);
+  if (pf.auditor) L.push(['Auditor independente', pf.auditor]);
+  if (pf.site) L.push(['Site', pf.site]);
+  return L;
+}
+const urlSite = s => /^https?:\/\//i.test(s) ? s : 'https://' + s.replace(/^\/+/, '');
 function renderAnalise() {
   const el = $('#p-analise'); const per = state.caso.periodos;
   let h = '';
   if (R.avisos.length) h += `<div class="aviso" role="status"><strong>Confira os dados antes de usar a análise</strong><ul>${R.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>`;
   if (per.length < 2) h += `<div class="aviso"><strong>Só um período selecionado.</strong> Os índices são calculados, mas a análise de evolução precisa de pelo menos dois períodos.</div>`;
-  h += `<div class="barra-acoes"><button class="btn primario" type="button" data-copiar="tudo">Copiar análise completa</button><span class="nota">Texto gerado por regras a partir dos números. Revise antes de entregar.</span></div>`;
+  h += `<div class="barra-acoes"><button class="btn primario" type="button" data-copiar="tudo">Copiar análise completa</button><span class="nota">Texto gerado por regras a partir dos números; revise antes de entregar. Os valores <span class="sublinhado">sublinhados</span> mostram a fórmula e o cálculo.</span></div>`;
   h += `<div class="copia-fallback" id="copia-fallback" hidden><label for="ta-fallback" class="nota">A cópia automática foi bloqueada. Selecione e copie:</label><textarea id="ta-fallback" readonly></textarea></div>`;
   if (state.caso.fonte) h += `<p class="nota">Fonte: ${esc(state.caso.fonte)}</p>`;
-  if (R.abertura) h += `<section class="abertura"><h2>Apresentação</h2><p class="leitura">${esc(R.abertura)}</p><div class="ind-acoes"><button class="btn mini" type="button" data-copiar="abertura">Copiar parágrafo</button></div></section>`;
+  if (R.abertura) {
+    const ficha = fichaEmpresa();
+    h += `<section class="abertura"><h2>Apresentação</h2>`;
+    if (ficha.length) h += `<dl class="ficha">${ficha.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${k === 'Site' ? `<a href="${esc(urlSite(v))}" target="_blank" rel="noopener">${esc(v)}</a>` : esc(v)}</dd></div>`).join('')}</dl>`;
+    h += `<p class="leitura">${esc(R.abertura)}</p>`;
+    if (ficha.length) h += `<p class="nota">Ficha: cadastro e formulário cadastral da CVM. Missão, visão, valores e histórico não fazem parte dos dados abertos da CVM; ficam no site de relações com investidores da empresa.</p>`;
+    h += `<div class="ind-acoes"><button class="btn mini" type="button" data-copiar="abertura">Copiar parágrafo</button></div></section>`;
+  }
   h += `<label class="check incluir-ev"><input type="checkbox" id="chk-evidencias"${state.evDoc !== false ? ' checked' : ''}> Incluir os quadros de conferência no PDF e no Word</label>`;
   for (const g of R.grupos) {
     const its = g.ids.map(id => R.by[id]);
@@ -905,7 +974,7 @@ async function documentoDaAba() {
   const par = (t, nota) => B.push({ t: 'p', texto: t, nota });
   const tab = (cab, linhas, o = {}) => B.push({ t: 'tab', cab, linhas, dir: o.dir || [], neg: o.neg || [], recuo: o.recuo || [], larga: o.larga });
   if (aba === 'analise') {
-    if (R.abertura) { sub('Apresentação'); par(R.abertura); }
+    if (R.abertura) { sub('Apresentação'); const f = fichaEmpresa(); if (f.length) tab(['Item', 'Informação'], f); par(R.abertura); }
     for (const g of R.grupos) {
       const its = g.ids.map(id => R.by[id]);
       sub(g.titulo);
@@ -1079,7 +1148,7 @@ $('#btn-csv').addEventListener('click', async () => { const r = await csvDaAba()
 $('#btn-json').addEventListener('click', () => baixar(`caso-${slug(state.caso.empresa)}.json`, JSON.stringify({ caso: state.caso, params: state.params }, null, 1), 'application/json'));
 $('#btn-json').hidden = !PODE_EXPORTAR;
 function atualizarRotuloExportar() {
-  $('#rot-exportar').textContent = `Exportar a aba “${NOME_ABA[state.aba]}”:`;
+  $('#rot-exportar').textContent = `Aba ${NOME_ABA[state.aba]}`;
   $('#imp-aba').textContent = `${NOME_ABA[state.aba]} · gerado em ${new Date().toLocaleDateString('pt-BR')} pelo Analisador de Demonstrações`;
   $('#btn-csv').textContent = ['dados', 'params'].includes(state.aba) ? 'CSV dos dados' : 'CSV';
 }
@@ -1089,20 +1158,20 @@ $('#btn-branco').addEventListener('click', () => { usarCaso(casoBranco(), false)
 // ---------- Parâmetros ----------
 const CAMPOS = [
   ['Cálculo dos índices', [
-    ['saldos', 'Base de saldos em giro, rentabilidades e prazos', [['final', 'Saldo final do período (Isabel)'], ['medio', 'Saldo médio: (inicial + final) ÷ 2']]],
-    ['dias', 'Dias no ano dos prazos médios', [['360', '360 (Isabel)'], ['365', '365']]],
-    ['lsModo', 'Numerador da liquidez seca', [['est_da', 'AC − Estoques − Desp. antecipadas (Isabel)'], ['est', 'AC − Estoques']]],
-    ['liModo', 'Disponível na liquidez imediata', [['disp_aplic', 'Caixa, equivalentes e aplicações (Isabel)'], ['disp', 'Só caixa e equivalentes']]],
-    ['pctModo', 'Participação de capitais de terceiros', [['ct_pl', 'CT ÷ PL × 100 (Isabel)'], ['ct_at', 'CT ÷ Ativo total × 100 (Gustavo)']]],
+    ['saldos', 'Base de saldos em giro, rentabilidades e prazos', [['final', 'Saldo final do período'], ['medio', 'Saldo médio: (inicial + final) ÷ 2']], 'Com saldo médio, o primeiro ano do intervalo fica sem cálculo nesses índices, porque falta o saldo do ano anterior.'],
+    ['dias', 'Dias no ano dos prazos médios', [['360', '360 (ano comercial)'], ['365', '365 (ano civil)']]],
+    ['lsModo', 'Numerador da liquidez seca', [['est_da', 'AC − Estoques − Despesas antecipadas'], ['est', 'AC − Estoques']]],
+    ['liModo', 'Disponível na liquidez imediata', [['disp_aplic', 'Caixa, equivalentes e aplicações financeiras'], ['disp', 'Só caixa e equivalentes']]],
+    ['pctModo', 'Participação de capitais de terceiros', [['ct_pl', 'CT ÷ PL × 100'], ['ct_at', 'CT ÷ Ativo total × 100 (endividamento geral)']]],
     ['taxaRef', 'Taxa de referência para o ROE (% ao ano)', 'num', 'Opcional. Representa o custo de oportunidade dos sócios (Selic, CDI ou outra).']
   ]],
   ['Comparação no tempo', [
-    ['varPct', 'Variação de índices em %', [['pp', 'Pontos percentuais (p.p.)'], ['pct', 'Como no exemplo (“redução de 20%”)']]],
-    ['deltaArred', 'Calcular variações sobre', [['true', 'Valores arredondados, como na mão (Isabel)'], ['false', 'Valores exatos']]],
+    ['varPct', 'Variação de índices em %', [['pp', 'Pontos percentuais (p.p.)'], ['pct', 'Variação relativa (“redução de 20%”)']]],
+    ['deltaArred', 'Calcular variações sobre', [['true', 'Valores exibidos (arredondados)'], ['false', 'Valores exatos']], 'Os índices são sempre calculados com valores exatos. Esta opção vale só para a diferença escrita no texto: com valores exibidos, “de 185 para 212 dias (+27 dias)” confere com a conta feita à mão; com valores exatos, pode sair “+26 dias”.'],
     ['decPct', 'Casas decimais dos índices em %', 'num'],
     ['estX', 'Faixa de estabilidade, índices em vezes (% de variação)', 'num', 'Abaixo disso, o índice é descrito como “praticamente estável”.'],
     ['estPP', 'Faixa de estabilidade, índices em % (p.p.)', 'num'],
-    ['estDias', 'Faixa de estabilidade, prazos (dias)', 'num', 'A Cia Grega chama de “praticamente estável” um PMPC que foi de 38 para 35 dias.'],
+    ['estDias', 'Faixa de estabilidade, prazos (dias)', 'num', 'Exemplo: um prazo que vai de 38 para 35 dias é descrito como “praticamente estável”.'],
     ['estGrupo', 'Faixa de estabilidade de numerador e denominador (%)', 'num']
   ]],
   ['Seleção de contas', [
@@ -1116,7 +1185,7 @@ const CAMPOS = [
 ];
 function renderParams() {
   const P = state.params;
-  let h = `<div class="barra-acoes"><button class="btn" type="button" id="btn-padrao">Voltar ao padrão da Profa. Isabel</button><span class="nota">Os valores de estabilidade e seleção ainda serão calibrados com mais textos da professora.</span></div><div class="form-params">`;
+  let h = `<div class="barra-acoes"><button class="btn" type="button" id="btn-padrao">Voltar ao padrão</button><span class="nota">O padrão segue as fórmulas usuais da disciplina. Faixas de estabilidade e seleção podem ser ajustadas.</span></div><div class="form-params">`;
   for (const [leg, campos] of CAMPOS) {
     h += `<fieldset><legend>${esc(leg)}</legend>`;
     for (const [k, rot, tipo, ajuda] of campos) {
@@ -1144,6 +1213,7 @@ $('#p-params').addEventListener('click', e => {
 
 // ---------- abas e cópia ----------
 function irAba(nome) {
+  if (LEITURA && (nome === 'dados' || nome === 'params')) nome = 'analise';
   state.aba = nome;
   esconderDica();
   for (const a of ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params']) {
@@ -1161,7 +1231,58 @@ document.addEventListener('click', e => {
   copiar(k === 'tudo' ? textoCompleto() : k === 'abertura' ? R.abertura : R.by[k].texto, k === 'tudo' ? 'Análise' : 'Parágrafo');
 });
 
-carregar();
-recalcular(); renderDados(); renderParams(); irAba(state.aba);
-carregarBase();
+// ---------- acesso: link de leitura ----------
+const b64url = u8 => btoa(String.fromCharCode(...u8)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const deB64url = t => Uint8Array.from(atob(t.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function gerarLink() {
+  const p = state.caso.periodos;
+  const dif = Object.fromEntries(Object.entries(state.params).filter(([k, v]) => v !== E.PADRAO[k]));
+  const dados = new TextEncoder().encode(JSON.stringify({ c: state.cvm.c, de: p[0], ate: p[p.length - 1], p: dif }));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, ACESSO.chave, dados));
+  const tudo = new Uint8Array(iv.length + ct.length); tudo.set(iv); tudo.set(ct, iv.length);
+  return `${location.origin}${location.pathname}#l=${b64url(tudo)}`;
+}
+async function lerLink() {
+  const doHash = (location.hash.match(/[#&]l=([\w-]+)/) || [])[1];
+  let salvo = null; try { salvo = localStorage.getItem(CHAVE_LINK); } catch (e) { }
+  for (const tok of [doHash, salvo]) {
+    if (!tok) continue;
+    try {
+      const u = deB64url(tok);
+      const txt = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, ACESSO.chave, u.slice(12)));
+      const l = JSON.parse(txt);
+      try { localStorage.setItem(CHAVE_LINK, tok); } catch (e) { }
+      return l;
+    } catch (e) { if (tok === doHash) setTimeout(() => toast('Link de leitura inválido'), 400); }
+  }
+  return null;
+}
+$('#btn-link').addEventListener('click', async () => {
+  if (state.caso.preset !== 'cvm' || !state.cvm) { toast('O link de leitura funciona com empresas da base da CVM'); return; }
+  const url = await gerarLink();
+  copiar(url, `Link de leitura (${state.caso.empresa}, ${state.caso.periodos[0]} a ${state.caso.periodos[state.caso.periodos.length - 1]})`);
+});
+$('#btn-sair').addEventListener('click', () => ACESSO && ACESSO.sair());
+function aplicarAcesso() {
+  document.documentElement.dataset.acesso = LEITURA ? 'leitura' : ADMIN ? 'admin' : 'livre';
+  document.querySelectorAll('.so-admin').forEach(el => { el.hidden = !ADMIN; });
+  $('#btn-sair').hidden = !ACESSO;
+  if (LEITURA) {
+    for (const id of ['#btn-trocar', '#t-dados', '#t-params', '#btn-json', 'label[for="arq-importar"]', '#btn-branco']) { const el = $(id); if (el) el.hidden = true; }
+    window.addEventListener('hashchange', () => location.reload());
+  }
+}
+
+(async () => {
+  aplicarAcesso();
+  carregar();
+  if (LEITURA) {
+    LINK = await lerLink();
+    if (LINK) state.params = { ...E.PADRAO, ...(LINK.p || {}) };
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  }
+  recalcular(); renderDados(); renderParams(); irAba(state.aba);
+  carregarBase();
+})();
 })();

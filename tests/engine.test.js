@@ -23,7 +23,7 @@ t('Cia Grega reproduz os 51 valores do material', () => {
   });
 });
 
-t('Cia Grega: texto da liquidez corrente segue o modelo da professora', () => {
+t('Cia Grega: texto da liquidez corrente segue o modelo do material', () => {
   const tx = E.analisar(EX['cia-grega'], {}).by.LC.texto;
   assert.ok(tx.includes('ambos aumentaram, só que o ativo circulante teve um aumento de 27,83% e o passivo circulante de 48,34%'), tx);
   assert.ok(tx.includes('Para cada R$ 1,00 de passivo circulante, a empresa possui 2,85'), tx);

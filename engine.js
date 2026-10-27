@@ -682,12 +682,30 @@ const Engine = (() => {
     return cs.filter(x => Math.sign(x.d) === Math.sign(tot) && x.d !== 0).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
   }
   // parágrafo de abertura
+  function controleTxt(c) {
+    const u = semAc(c);
+    if (!u) return '';
+    const base = u.includes('ESTATAL') ? 'estatal' : u.includes('ESTRANG') ? 'estrangeiro' : u.includes('PRIVAD') ? 'privado' : '';
+    return base ? base + (u.includes('HOLDING') ? ' (holding)' : '') : '';
+  }
   function abertura(caso, ctx) {
     const Lb = caso.periodos, n = Lb.length;
     const emp = caso.empresa || 'a empresa';
     let s = `Foram analisados ${n > 1 ? `os exercícios de ${Lb[0]} a ${Lb[n - 1]}` : `o exercício de ${Lb[0]}`} da ${emp}`;
-    if (caso.setor) s += `, companhia classificada pela CVM no setor “${caso.setor}”`;
+    const pf = caso.perfil || {};
     s += caso.escala === 'mil' ? ', com base nas demonstrações financeiras padronizadas (DFP) entregues à CVM, com valores em milhares de reais.' : '.';
+    const quem = [];
+    const ano = /^\d{4}/.test(pf.fundacao || '') ? pf.fundacao.slice(0, 4) : '';
+    if (ano) quem.push(`foi constituída em ${ano}`);
+    if (pf.sede) { const [cid, uf] = pf.sede.split(/,\s*/); quem.push(`tem sede em ${cid}${uf ? ` (${uf})` : ''}`); }
+    const setor = caso.setor || pf.setor;
+    if (setor) quem.push(`é classificada pela CVM no setor “${setor}”`);
+    const ctrl = controleTxt(pf.controle);
+    if (ctrl) quem.push(`é de controle ${ctrl}`);
+    const tk = (pf.tickers || []).join(', ');
+    if (pf.segmento && tk) quem.push(`tem ações negociadas na B3 no segmento ${pf.segmento} (${tk})`);
+    else if (tk) quem.push(`tem ações negociadas na B3 (${tk})`);
+    if (quem.length) s += ` A companhia ${lista(quem)}.`;
     if (n > 1) {
       const RL = ctx.serie(['DRE.RL']), AT = ctx.serie(['AC.', 'ANC.']), LL = ctx.serie(['DRE.LL']);
       const fr = [];
@@ -978,6 +996,7 @@ const Engine = (() => {
     const ind = sel.filter(i => doc.periodos[i].base === 'ind').map(i => doc.periodos[i].rotulo);
     return {
       preset: 'cvm', cd_cvm: doc.cd_cvm, empresa: doc.empresa, sinais: 'despesa_positiva', escala: 'mil', setor: doc.setor || '',
+      perfil: doc.perfil || null,
       fonte: doc.fonte + (ind.length ? ` Em ${lista(ind)} a empresa não publicou demonstrações consolidadas; foram usadas as individuais.` : ''),
       periodos: sel.map(i => doc.periodos[i].rotulo),
       extras: { estoqueInicial: ei, compras: [] }, contas,
@@ -987,7 +1006,7 @@ const Engine = (() => {
     };
   }
 
-  return { analisar, casoDaBase, CODIGOS, GRUPOS_BP, PADRAO, fmtN, fmtVal: (unid, v, P) => fmtVal({ unid }, v, { ...PADRAO, ...(P || {}) }), num };
+  return { analisar, casoDaBase, controleTxt, CODIGOS, GRUPOS_BP, PADRAO, fmtN, fmtVal: (unid, v, P) => fmtVal({ unid }, v, { ...PADRAO, ...(P || {}) }), num };
 })();
 if (typeof module !== 'undefined') module.exports = Engine;
 if (typeof window !== 'undefined') window.Engine = Engine;

@@ -1,7 +1,7 @@
 {
  "preset": "cia-grega",
  "empresa": "Cia Grega",
- "fonte": "Exemplo de análise de indicadores (Martins et al., 2014), material da Profa. Isabel Gozer. O exemplo traz os totais por grupo; as contas aparecem detalhadas só onde o material informa.",
+ "fonte": "Exemplo de análise de indicadores (Martins et al., 2014). O exemplo traz os totais por grupo; as contas aparecem detalhadas só onde o material informa.",
  "periodos": [
   "Ano 1",
   "Ano 2",

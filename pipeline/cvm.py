@@ -415,38 +415,107 @@ def ler_cadastro(fonte, cache):
                 cd = str(int(row.get("CD_CVM") or ""))
             except ValueError:
                 continue
+            g = lambda k: (row.get(k) or "").strip()
             cad[cd] = {
-                "setor": (row.get("SETOR_ATIV") or "").strip(),
-                "situacao": (row.get("SIT") or "").strip(),
-                "comercial": (row.get("DENOM_COMERC") or "").strip(),
+                "setor": g("SETOR_ATIV"),
+                "situacao": g("SIT"),
+                "comercial": g("DENOM_COMERC"),
+                "razao": g("DENOM_SOCIAL"),
+                "fundacao": data_iso(g("DT_CONST")),
+                "registro": data_iso(g("DT_REG")),
+                "controle": g("CONTROLE_ACIONARIO"),
+                "municipio": g("MUN"),
+                "uf": g("UF"),
+                "auditor": g("AUDITOR"),
+                "situacao_emissor": g("SIT_EMISSOR"),
             }
     except Exception as e:  # o cadastro é complementar; a base funciona sem ele
         log("aviso: cadastro indisponível:", e)
     return cad
 
 
-def ler_tickers(anos, fonte, cache):
+def data_iso(txt):
+    """Aceita AAAA-MM-DD ou DD/MM/AAAA e devolve AAAA-MM-DD (ou vazio)."""
+    txt = (txt or "").strip()
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2}).*", txt)
+    if m:
+        return "-".join(m.groups())
+    m = re.fullmatch(r"(\d{2})/(\d{2})/(\d{4}).*", txt)
+    if m:
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    return ""
+
+
+def ler_fca(anos, fonte, cache):
+    """Lê o formulário cadastral (FCA): códigos de negociação, segmento de listagem,
+    site e espécie de controle. Devolve (tickers por CNPJ, perfil por CNPJ)."""
     por_cnpj = defaultdict(set)
+    perfil = defaultdict(dict)
     for ano in sorted(anos, reverse=True)[:2]:
         try:
             dados = obter(URL_FCA.format(ano=ano), fonte, cache)
             if not dados:
                 continue
             z = zipfile.ZipFile(io.BytesIO(dados))
-            alvo = [n for n in z.namelist() if re.search(r"valor_mobiliario_\d{4}\.csv$", n, re.I)]
-            if not alvo:
-                continue
-            for row in ler_csv(z.read(alvo[0])):
-                cod = (row.get("Codigo_Negociacao") or "").strip().upper()
-                fim = (row.get("Data_Fim_Negociacao") or "").strip()
-                cnpj = (row.get("CNPJ_Companhia") or "").strip()
-                if cod and cnpj and not fim and re.fullmatch(r"[A-Z0-9]{4}\d{1,2}[A-Z]?", cod):
-                    por_cnpj[cnpj].add(cod)
+            nomes = z.namelist()
+            alvo = [n for n in nomes if re.search(r"valor_mobiliario_\d{4}\.csv$", n, re.I)]
+            if alvo:
+                for row in ler_csv(z.read(alvo[0])):
+                    cod = (row.get("Codigo_Negociacao") or "").strip().upper()
+                    fim = (row.get("Data_Fim_Negociacao") or "").strip()
+                    cnpj = (row.get("CNPJ_Companhia") or "").strip()
+                    if cod and cnpj and not fim and re.fullmatch(r"[A-Z0-9]{4}\d{1,2}[A-Z]?", cod):
+                        por_cnpj[cnpj].add(cod)
+                    seg = (row.get("Segmento") or "").strip()
+                    if cnpj and seg and not (row.get("Data_Fim_Listagem") or "").strip() and "segmento" not in perfil[cnpj]:
+                        perfil[cnpj]["segmento"] = seg
+            geral = [n for n in nomes if re.search(r"_geral_\d{4}\.csv$", n, re.I)]
+            if geral:
+                for row in ler_csv(z.read(geral[0])):
+                    cnpj = (row.get("CNPJ_Companhia") or "").strip()
+                    if not cnpj:
+                        continue
+                    p = perfil[cnpj]
+                    site = (row.get("Pagina_Web") or "").strip()
+                    if site and "site" not in p:
+                        p["site"] = site
+                    fund = data_iso(row.get("Data_Constituicao"))
+                    if fund and "fundacao" not in p:
+                        p["fundacao"] = fund
+                    ctrl = (row.get("Especie_Controle_Acionario") or "").strip()
+                    if ctrl and "controle" not in p:
+                        p["controle"] = ctrl
             if por_cnpj:
                 break
         except Exception as e:
-            log("aviso: códigos de negociação indisponíveis:", e)
-    return {k: sorted(v) for k, v in por_cnpj.items()}
+            log("aviso: formulário cadastral indisponível:", e)
+    return {k: sorted(v) for k, v in por_cnpj.items()}, dict(perfil)
+
+
+def nome_proprio(txt):
+    """JARAGUÁ DO SUL -> Jaraguá do Sul."""
+    miudas = {"de", "da", "do", "das", "dos", "e"}
+    return " ".join(p if p in miudas and i else p.capitalize() for i, p in enumerate(txt.strip().lower().split()))
+
+
+def montar_perfil(nome, cnpj, info, fca, tickers):
+    """Ficha da empresa com o que os dados abertos da CVM trazem. Campos vazios ficam de fora."""
+    sede = ", ".join(x for x in [nome_proprio(info.get("municipio", "")), info.get("uf", "")] if x)
+    p = {
+        "razao": info.get("razao") or nome,
+        "comercial": info.get("comercial", ""),
+        "setor": info.get("setor", ""),
+        "fundacao": fca.get("fundacao") or info.get("fundacao", ""),
+        "registro": info.get("registro", ""),
+        "sede": sede,
+        "controle": fca.get("controle") or info.get("controle", ""),
+        "segmento": fca.get("segmento", ""),
+        "tickers": tickers,
+        "auditor": info.get("auditor", ""),
+        "site": fca.get("site", ""),
+        "situacao": info.get("situacao_emissor") or info.get("situacao", ""),
+    }
+    return {k: v for k, v in p.items() if v}
 
 
 # --------------------------------------------------------------------------
@@ -481,7 +550,7 @@ def main():
         sys.exit(1)
 
     cad = ler_cadastro(args.fonte, args.cache)
-    tickers = ler_tickers(anos_lidos, args.fonte, args.cache)
+    tickers, fca = ler_fca(anos_lidos, args.fonte, args.cache)
 
     os.makedirs(os.path.join(args.saida, "cia"), exist_ok=True)
     os.makedirs(os.path.join(args.saida, "dfp"), exist_ok=True)
@@ -509,6 +578,7 @@ def main():
             "escala": "R$ mil",
             "fonte": "CVM, Dados Abertos: Demonstrações Financeiras Padronizadas (DFP). Valores em R$ mil; "
                      "custos, despesas e impostos com sinal positivo.",
+            "perfil": montar_perfil(nome, cnpj, info, fca.get(cnpj, {}), item["t"]),
             "periodos": emp["periodos"], "contas": emp["contas"], "dfc": emp["dfc"],
         }
         with open(os.path.join(args.saida, "cia", f"{cd}.json"), "w", encoding="utf-8") as f:
