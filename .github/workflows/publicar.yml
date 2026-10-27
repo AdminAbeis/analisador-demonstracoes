@@ -35,6 +35,7 @@ jobs:
         run: |
           python pipeline/test_cvm.py
           node tests/engine.test.js
+          node tests/proteger.test.js
 
       - name: Baixar e processar as DFPs da CVM
         run: |
@@ -44,6 +45,13 @@ jobs:
           python pipeline/cvm.py --saida _site/data
           du -sh _site/data
           ls _site/data/cia | wc -l
+
+      # Só protege se o Secret SENHA_ADMIN existir; sem ele, o site é publicado aberto.
+      - name: Proteger com senha
+        env:
+          SENHA_ADMIN: ${{ secrets.SENHA_ADMIN }}
+          SENHA_LEITURA: ${{ secrets.SENHA_LEITURA }}
+        run: node pipeline/proteger.js _site
 
       - uses: actions/configure-pages@v5
 
