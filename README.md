@@ -106,7 +106,7 @@ Sem configuração, o site fica aberto. Para exigir senha, crie dois Secrets no 
 | Secret | Quem usa | O que libera |
 |---|---|---|
 | `SENHA_ADMIN` | Você | Tudo: trocar empresa e período, abas Dados e Parâmetros, importar, gerar links de leitura |
-| `SENHA_LEITURA` | O grupo (opcional) | Só a análise que você fixou: abas Análise, Estruturas, Demonstrações e AV e AH, com exportação |
+| `SENHA_LEITURA` | O grupo (opcional) | Só a análise que você fixou: todas as abas, com exportação; Dados e Parâmetros aparecem sem edição |
 
 Como fixar a análise do grupo: entre com a senha de administrador, escolha a empresa, o período e os parâmetros, abra o menu **⋯** e use **Copiar link de leitura**. Quem abrir esse link com a senha de leitura vê exatamente essa análise e não consegue trocar de empresa. O navegador lembra o último link válido.
 
@@ -114,7 +114,7 @@ Como funciona: o workflow junta `engine.js` e `app.js` e os criptografa (AES-GCM
 
 Limites:
 - Os dados da CVM (`data/`) continuam públicos, como já são no portal da CVM.
-- O modo leitura esconde as abas de edição, mas quem entende de programação e tem a senha de leitura consegue reabilitá-las no próprio navegador. É uma barreira para colegas, não um cofre.
+- O modo leitura bloqueia a edição, mas quem entende de programação e tem a senha de leitura consegue reabilitá-las no próprio navegador. É uma barreira para colegas, não um cofre.
 - Com o repositório público, o código-fonte fica visível no GitHub. Para escondê-lo, deixe o repositório privado: o GitHub Pages em repositório privado exige GitHub Pro, que é gratuito para estudantes pelo GitHub Student Developer Pack. O site continua no mesmo endereço.
 
 ## Rodar no próprio computador

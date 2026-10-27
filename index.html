@@ -226,6 +226,10 @@ footer.rodape a { color: var(--accent); }
 @media (max-width: 899px) { .est-svg { display: none; } }
 @media (max-width: 520px) { .bp-colunas { grid-template-columns: minmax(0, 1fr); } .bp-colunas > div + div { border-left: 0; border-top: 2px solid var(--rule); } }
 
+/* modo leitura: campos só para ver */
+html[data-acesso="leitura"] .painel input[readonly] { background: var(--paper); border-color: var(--rule); cursor: default; }
+html[data-acesso="leitura"] .painel select:disabled { opacity: 1; color: var(--ink); background: var(--paper); border-color: var(--rule); }
+
 /* porta de entrada (site com senha) */
 html.trancado body > header, html.trancado body > nav, html.trancado body > main, html.trancado body > footer { display: none; }
 .porta { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }

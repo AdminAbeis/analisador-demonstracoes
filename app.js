@@ -42,7 +42,7 @@ function carregar() {
   try {
     const s = JSON.parse(localStorage.getItem(CHAVE) || 'null');
     if (LEITURA) {
-      if (s && ['analise', 'mapa', 'demo', 'estrutura'].includes(s.aba)) state.aba = s.aba;
+      if (s && ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'].includes(s.aba)) state.aba = s.aba;
       if (s && s.evDoc === false) state.evDoc = false;
       return;
     }
@@ -829,10 +829,19 @@ function renderDados() {
   h += `</tbody></table></div>`;
   h += `<p class="nota">“Já incluída” marca uma conta de detalhe que já está somada em outra (como fornecedores dentro de um passivo circulante não detalhado): ela entra nas fórmulas que a usam, mas não na soma do grupo.</p>`;
   h += `<details><summary class="btn mini" style="display:inline-flex">Colar dados em CSV</summary><div class="copia-fallback" style="margin-top:10px"><label for="ta-colar" class="nota">Uma linha por conta: <code>conta;classificação;valor1;valor2;…</code>. A linha de cabeçalho traz os períodos: <code>conta;classificacao;2023;2024;2025</code>. Classificações: ${E.CODIGOS.map(([c]) => c).join(', ')}. Use “*” no fim da classificação para conta já incluída (ex.: PC.FORN*). Uma linha <code>#empresa;Nome</code> define o nome.</label><textarea id="ta-colar" placeholder="conta;classificacao;2023;2024;2025"></textarea><div><button class="btn primario" type="button" id="btn-colar">Usar estes dados</button></div></div></details>`;
-  el.innerHTML = h;
+  el.innerHTML = h; travar(el);
+}
+// Modo leitura: Dados e Parâmetros ficam visíveis, mas sem edição.
+function travar(el) {
+  if (!LEITURA) return;
+  el.querySelectorAll('input[type=text], textarea').forEach(i => { i.readOnly = true; });
+  el.querySelectorAll('select, input[type=checkbox]').forEach(i => { i.disabled = true; });
+  el.querySelectorAll('.barra-acoes, [data-add], [data-rem], details').forEach(x => { x.hidden = true; });
+  el.insertAdjacentHTML('afterbegin', `<p class="aviso">Somente visualização: ${el.id === 'p-params' ? 'os parâmetros' : 'os dados'} foram definidos pelo administrador no link de leitura.</p>`);
 }
 function editado() { state.editado = true; if (state.caso.preset === 'cvm') state.caso.preset = 'cvm-editado'; }
 $('#p-dados').addEventListener('change', e => {
+  if (LEITURA) return;
   const t = e.target; const c = state.caso;
   if (t.id === 'd-empresa') c.empresa = t.value.trim();
   else if (t.id === 'd-ei') { c.extras = c.extras || {}; const v = parseBR(t.value); c.extras.estoqueInicial = v == null ? '' : v; t.value = fmtInput(v); }
@@ -845,6 +854,7 @@ $('#p-dados').addEventListener('change', e => {
   editado(); recalcular();
 });
 $('#p-dados').addEventListener('click', e => {
+  if (LEITURA) return;
   const b = e.target.closest('button'); if (!b) return; const c = state.caso;
   if (b.dataset.add) {
     const cod = E.CODIGOS.find(([k]) => k.startsWith(b.dataset.add + '.') && /OUT$|LL$/.test(k)) || E.CODIGOS.find(([k]) => k.startsWith(b.dataset.add + '.'));
@@ -1197,9 +1207,10 @@ function renderParams() {
     }
     h += `</fieldset>`;
   }
-  $('#p-params').innerHTML = h + '</div>';
+  $('#p-params').innerHTML = h + '</div>'; travar($('#p-params'));
 }
 $('#p-params').addEventListener('change', e => {
+  if (LEITURA) return;
   const k = e.target.dataset.p; if (!k) return;
   let v = e.target.value;
   if (k === 'dias') v = Number(v);
@@ -1208,12 +1219,12 @@ $('#p-params').addEventListener('change', e => {
   state.params[k] = v; recalcular();
 });
 $('#p-params').addEventListener('click', e => {
+  if (LEITURA) return;
   if (e.target.id === 'btn-padrao') { state.params = { ...E.PADRAO }; renderParams(); recalcular(); toast('Parâmetros restaurados'); }
 });
 
 // ---------- abas e cópia ----------
 function irAba(nome) {
-  if (LEITURA && (nome === 'dados' || nome === 'params')) nome = 'analise';
   state.aba = nome;
   esconderDica();
   for (const a of ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params']) {
@@ -1269,7 +1280,7 @@ function aplicarAcesso() {
   document.querySelectorAll('.so-admin').forEach(el => { el.hidden = !ADMIN; });
   $('#btn-sair').hidden = !ACESSO;
   if (LEITURA) {
-    for (const id of ['#btn-trocar', '#t-dados', '#t-params', '#btn-json', 'label[for="arq-importar"]', '#btn-branco']) { const el = $(id); if (el) el.hidden = true; }
+    for (const id of ['#btn-trocar', '#btn-json', 'label[for="arq-importar"]', '#btn-branco']) { const el = $(id); if (el) el.hidden = true; }
     window.addEventListener('hashchange', () => location.reload());
   }
 }
