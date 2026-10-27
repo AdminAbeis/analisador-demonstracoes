@@ -106,15 +106,15 @@ Sem configuração, o site fica aberto. Para exigir senha, crie dois Secrets no 
 | Secret | Quem usa | O que libera |
 |---|---|---|
 | `SENHA_ADMIN` | Você | Tudo: trocar empresa e período, abas Dados e Parâmetros, importar, gerar links de leitura |
-| `SENHA_LEITURA` | O grupo (opcional) | Só a análise que você fixou: todas as abas, com exportação; Dados e Parâmetros aparecem sem edição |
+| `SENHA_LEITURA` | O grupo (opcional) | A empresa e os anos que você fixou no link: todas as abas e a exportação; Dados e Parâmetros podem ser alterados para testar, sem trocar de empresa |
 
-Como fixar a análise do grupo: entre com a senha de administrador, escolha a empresa, o período e os parâmetros, abra o menu **⋯** e use **Copiar link de leitura**. Quem abrir esse link com a senha de leitura vê exatamente essa análise e não consegue trocar de empresa. O navegador lembra o último link válido.
+Como fixar a análise do grupo: entre com a senha de administrador, escolha a empresa, o período e os parâmetros, abra o menu **⋯** e use **Copiar link de leitura**. Quem abrir esse link com a senha de leitura vê essa análise e não consegue trocar de empresa, mudar os anos, importar ou colar dados de outra empresa. Mudanças nos valores e nos parâmetros ficam só no navegador de quem as fez. O navegador lembra o último link válido.
 
 Como funciona: o workflow junta `engine.js` e `app.js` e os criptografa (AES-GCM, chave derivada da senha com PBKDF2). O site publicado só tem `porta.js` e o código cifrado; sem senha, a página não funciona. Para trocar a senha, edite o Secret e rode o workflow; quem tinha marcado "Lembrar neste navegador" precisa digitar a senha nova.
 
 Limites:
 - Os dados da CVM (`data/`) continuam públicos, como já são no portal da CVM.
-- O modo leitura bloqueia a edição, mas quem entende de programação e tem a senha de leitura consegue reabilitá-las no próprio navegador. É uma barreira para colegas, não um cofre.
+- O modo leitura bloqueia a troca de empresa, mas quem entende de programação e tem a senha de leitura consegue contornar esse bloqueio no próprio navegador. É uma barreira para colegas, não um cofre.
 - Com o repositório público, o código-fonte fica visível no GitHub. Para escondê-lo, deixe o repositório privado: o GitHub Pages em repositório privado exige GitHub Pro, que é gratuito para estudantes pelo GitHub Student Developer Pack. O site continua no mesmo endereço.
 
 ## Rodar no próprio computador

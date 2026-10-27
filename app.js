@@ -13,6 +13,7 @@ const ADMIN = !!ACESSO && ACESSO.modo === 'admin';
 const CHAVE = LEITURA ? 'analisador-dc-leitura' : 'analisador-dc-v3';
 const CHAVE_LINK = 'analisador-dc-link';
 let LINK = null;          // análise fixada pelo link de leitura: { c, de, ate, p }
+let LINK_TOK = null;
 const CD_INICIAL = '5410'; // WEG: empresa aberta na primeira visita
 const BASE_URL = 'data/';
 // Fora do Claude (GitHub Pages, servidor local ou arquivo aberto no computador) os downloads funcionam.
@@ -36,14 +37,16 @@ let BASE = null;          // empresas.json
 let DOC = null;           // arquivo da empresa escolhida na base CVM
 
 function salvar() {
-  try { localStorage.setItem(CHAVE, JSON.stringify({ caso: state.caso, params: state.params, editado: state.editado, aba: state.aba, cvm: state.cvm, evDoc: state.evDoc })); } catch (e) { }
+  try { localStorage.setItem(CHAVE, JSON.stringify({ caso: state.caso, params: state.params, editado: state.editado, aba: state.aba, cvm: state.cvm, evDoc: state.evDoc, link: LINK_TOK })); } catch (e) { }
 }
+let SALVO_LEITURA = null; // no modo leitura, as edições valem para o link em que foram feitas
 function carregar() {
   try {
     const s = JSON.parse(localStorage.getItem(CHAVE) || 'null');
     if (LEITURA) {
       if (s && ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'].includes(s.aba)) state.aba = s.aba;
       if (s && s.evDoc === false) state.evDoc = false;
+      SALVO_LEITURA = s;
       return;
     }
     if (s && s.caso && Array.isArray(s.caso.contas)) {
@@ -108,7 +111,14 @@ async function carregarBase() {
       ? `Base de demonstração com ${n} companhia. A base completa, com todas as companhias abertas, é gerada pela atualização semanal no GitHub.`
       : `${n.toLocaleString('pt-BR')} companhias abertas com balanço e DRE na CVM (${faixaAnos()}), atualizado em ${data}.`;
     $('#rodape').innerHTML = `Dados: <a href="https://dados.cvm.gov.br/dataset/cia_aberta-doc-dfp" target="_blank" rel="noopener">CVM, Portal de Dados Abertos</a> (licença ODbL). Os textos são gerados por regras e devem ser revisados antes de entregar.`;
-    if (LINK) abrirEmpresa(LINK.c, LINK.de, LINK.ate, true);
+    if (LEITURA) {
+      const c = LINK || { c: CD_INICIAL };
+      await abrirEmpresa(c.c, c.de, c.ate, true);
+      const sv = SALVO_LEITURA;
+      if (sv && sv.link === LINK_TOK && sv.editado && sv.caso && Array.isArray(sv.caso.contas) && sv.caso.cd_cvm === state.caso.cd_cvm) {
+        state.caso = sv.caso; state.editado = true; recalcular(); renderDados();
+      }
+    }
     else if (state.cvm && state.caso.preset === 'cvm') abrirEmpresa(state.cvm.c, state.cvm.de, state.cvm.ate, true);
     else if (!restaurado) {
       const ini = BASE.empresas.find(e => e.c === CD_INICIAL && !e.fin) || BASE.empresas.find(e => !e.fin && e.a.length);
@@ -831,18 +841,24 @@ function renderDados() {
   h += `<details><summary class="btn mini" style="display:inline-flex">Colar dados em CSV</summary><div class="copia-fallback" style="margin-top:10px"><label for="ta-colar" class="nota">Uma linha por conta: <code>conta;classificação;valor1;valor2;…</code>. A linha de cabeçalho traz os períodos: <code>conta;classificacao;2023;2024;2025</code>. Classificações: ${E.CODIGOS.map(([c]) => c).join(', ')}. Use “*” no fim da classificação para conta já incluída (ex.: PC.FORN*). Uma linha <code>#empresa;Nome</code> define o nome.</label><textarea id="ta-colar" placeholder="conta;classificacao;2023;2024;2025"></textarea><div><button class="btn primario" type="button" id="btn-colar">Usar estes dados</button></div></div></details>`;
   el.innerHTML = h; travar(el);
 }
-// Modo leitura: Dados e Parâmetros ficam visíveis, mas sem edição.
+// Modo leitura: Dados e Parâmetros podem ser editados para testar, mas a empresa e os anos
+// são os do link (sem importar, colar, caso em branco, renomear a empresa ou mudar os períodos).
 function travar(el) {
   if (!LEITURA) return;
-  el.querySelectorAll('input[type=text], textarea').forEach(i => { i.readOnly = true; });
-  el.querySelectorAll('select, input[type=checkbox]').forEach(i => { i.disabled = true; });
-  el.querySelectorAll('.barra-acoes, [data-add], [data-rem], details').forEach(x => { x.hidden = true; });
-  el.insertAdjacentHTML('afterbegin', `<p class="aviso">Somente visualização: ${el.id === 'p-params' ? 'os parâmetros' : 'os dados'} foram definidos pelo administrador no link de leitura.</p>`);
+  if (el.id === 'p-dados') {
+    el.querySelectorAll('#d-empresa, input.periodo').forEach(i => { i.readOnly = true; i.title = 'Definido pelo link de leitura'; });
+    el.querySelectorAll('#btn-add-periodo, #btn-rem-periodo, details').forEach(x => { x.hidden = true; });
+    el.insertAdjacentHTML('afterbegin', `<div class="aviso">Você pode alterar valores e classificações para testar. As mudanças ficam só neste navegador; a empresa e os anos são os do link de leitura. <button class="btn mini" type="button" id="btn-restaurar-link">Restaurar os dados originais</button></div>`);
+  } else {
+    const b = el.querySelector('#btn-padrao');
+    if (b && LINK && LINK.p && Object.keys(LINK.p).length) b.textContent = 'Voltar aos parâmetros do link';
+    el.insertAdjacentHTML('afterbegin', `<p class="aviso">As mudanças nos parâmetros ficam só neste navegador e não mudam o que o restante do grupo vê.</p>`);
+  }
 }
 function editado() { state.editado = true; if (state.caso.preset === 'cvm') state.caso.preset = 'cvm-editado'; }
 $('#p-dados').addEventListener('change', e => {
-  if (LEITURA) return;
   const t = e.target; const c = state.caso;
+  if (LEITURA && (t.id === 'd-empresa' || t.dataset.per != null || t.id === 'ta-colar')) return;
   if (t.id === 'd-empresa') c.empresa = t.value.trim();
   else if (t.id === 'd-ei') { c.extras = c.extras || {}; const v = parseBR(t.value); c.extras.estoqueInicial = v == null ? '' : v; t.value = fmtInput(v); }
   else if (t.dataset.per != null) c.periodos[+t.dataset.per] = t.value.trim() || `Período ${+t.dataset.per + 1}`;
@@ -854,8 +870,12 @@ $('#p-dados').addEventListener('change', e => {
   editado(); recalcular();
 });
 $('#p-dados').addEventListener('click', e => {
-  if (LEITURA) return;
   const b = e.target.closest('button'); if (!b) return; const c = state.caso;
+  if (LEITURA && b.id === 'btn-restaurar-link') {
+    const l = LINK || { c: CD_INICIAL };
+    abrirEmpresa(l.c, l.de, l.ate, true).then(() => toast('Dados originais restaurados')); return;
+  }
+  if (LEITURA && ['btn-add-periodo', 'btn-rem-periodo', 'btn-colar'].includes(b.id)) return;
   if (b.dataset.add) {
     const cod = E.CODIGOS.find(([k]) => k.startsWith(b.dataset.add + '.') && /OUT$|LL$/.test(k)) || E.CODIGOS.find(([k]) => k.startsWith(b.dataset.add + '.'));
     c.contas.push({ nome: 'Nova conta', cod: cod[0], v: c.periodos.map(() => null) });
@@ -1210,7 +1230,6 @@ function renderParams() {
   $('#p-params').innerHTML = h + '</div>'; travar($('#p-params'));
 }
 $('#p-params').addEventListener('change', e => {
-  if (LEITURA) return;
   const k = e.target.dataset.p; if (!k) return;
   let v = e.target.value;
   if (k === 'dias') v = Number(v);
@@ -1219,8 +1238,7 @@ $('#p-params').addEventListener('change', e => {
   state.params[k] = v; recalcular();
 });
 $('#p-params').addEventListener('click', e => {
-  if (LEITURA) return;
-  if (e.target.id === 'btn-padrao') { state.params = { ...E.PADRAO }; renderParams(); recalcular(); toast('Parâmetros restaurados'); }
+  if (e.target.id === 'btn-padrao') { state.params = { ...E.PADRAO, ...(LEITURA && LINK ? LINK.p || {} : {}) }; renderParams(); recalcular(); toast('Parâmetros restaurados'); }
 });
 
 // ---------- abas e cópia ----------
@@ -1264,6 +1282,7 @@ async function lerLink() {
       const txt = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, ACESSO.chave, u.slice(12)));
       const l = JSON.parse(txt);
       try { localStorage.setItem(CHAVE_LINK, tok); } catch (e) { }
+      LINK_TOK = tok;
       return l;
     } catch (e) { if (tok === doHash) setTimeout(() => toast('Link de leitura inválido'), 400); }
   }
@@ -1290,7 +1309,10 @@ function aplicarAcesso() {
   carregar();
   if (LEITURA) {
     LINK = await lerLink();
-    if (LINK) state.params = { ...E.PADRAO, ...(LINK.p || {}) };
+    state.params = { ...E.PADRAO, ...(LINK ? LINK.p || {} : {}) };
+    // parâmetros que a pessoa mudou neste mesmo link continuam valendo
+    const sv = SALVO_LEITURA;
+    if (sv && sv.link === LINK_TOK && sv.params) state.params = { ...E.PADRAO, ...sv.params };
     if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   }
   recalcular(); renderDados(); renderParams(); irAba(state.aba);
