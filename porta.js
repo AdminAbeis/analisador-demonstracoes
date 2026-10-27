@@ -7,8 +7,18 @@
   const subtle = window.crypto && window.crypto.subtle;
   let PACOTE = null;
 
-  function lerLembrado() { try { return JSON.parse(localStorage.getItem(LEMBRAR) || 'null'); } catch (e) { return null; } }
-  function lembrar(v) { try { v ? localStorage.setItem(LEMBRAR, JSON.stringify(v)) : localStorage.removeItem(LEMBRAR); } catch (e) { } }
+  // "Lembrar neste navegador" marcado: guarda o acesso no navegador (localStorage).
+  // Desmarcado: guarda só enquanto a aba estiver aberta (sessionStorage), para recarregar sem pedir de novo.
+  function lerLembrado() {
+    for (const st of ['localStorage', 'sessionStorage']) {
+      try { const v = JSON.parse(window[st].getItem(LEMBRAR) || 'null'); if (v) return v; } catch (e) { }
+    }
+    return null;
+  }
+  function lembrar(v, persistente) {
+    for (const st of ['localStorage', 'sessionStorage']) { try { window[st].removeItem(LEMBRAR); } catch (e) { } }
+    if (v) { try { window[persistente ? 'localStorage' : 'sessionStorage'].setItem(LEMBRAR, JSON.stringify(v)); } catch (e) { } }
+  }
 
   async function abrirConteudo(kB64) {
     const K = await subtle.importKey('raw', deB64(kB64), 'AES-GCM', false, ['encrypt', 'decrypt']);
@@ -41,7 +51,7 @@
       <p class="nota">Digite a senha que você recebeu do administrador.</p>
       <input type="text" name="username" value="analisador" autocomplete="username" hidden>
       <label class="porta-campo"><span>Senha</span><input type="password" id="porta-senha" autocomplete="current-password" required></label>
-      <label class="check"><input type="checkbox" id="porta-lembrar" checked> Lembrar neste navegador</label>
+      <label class="check"><input type="checkbox" id="porta-lembrar"> Lembrar neste navegador</label>
       <button class="btn primario" type="submit">Entrar</button>
       <p class="porta-erro" id="porta-erro" role="alert">${msg || ''}</p>
     </form>`;
@@ -55,7 +65,7 @@
         const r = await tentarSenha(inp.value);
         if (!r) { err.textContent = 'Senha incorreta.'; inp.select(); return; }
         const { K, codigo } = await abrirConteudo(r.k);
-        if (d.querySelector('#porta-lembrar').checked) lembrar({ k: r.k, modo: r.modo });
+        lembrar({ k: r.k, modo: r.modo }, d.querySelector('#porta-lembrar').checked);
         executar(K, r.modo, codigo);
       } catch (e2) {
         err.textContent = 'Não foi possível abrir o site. Recarregue a página e tente de novo.';
