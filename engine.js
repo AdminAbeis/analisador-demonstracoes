@@ -573,7 +573,7 @@ const Engine = (() => {
       if (ctx.dfc[c]) evidencia(ctx, 'DFC', nome, ctx.dfc[c].v);
     const usos = [];
     if (CAPEX) usos.push(`aplicou ${ctx.rs(CAPEX)} em imobilizado e intangível`);
-    if (AQ) usos.push(`${ctx.rs(AQ)} na aquisição de empresas e participações`);
+    if (AQ) usos.push(`investiu ${ctx.rs(AQ)} na aquisição de empresas e participações`);
     if (DIV) usos.push(`pagou ${ctx.rs(DIV)} em dividendos e JCP`);
     let s = `Pela demonstração dos fluxos de caixa, ${faixa(ctx.Lb, i0, i1)} as operações ${OP >= 0 ? 'geraram' : 'consumiram'} ${ctx.rs(OP)} de caixa`;
     if (usos.length) s += `; no mesmo período, a empresa ${lista(usos)}`;
@@ -602,7 +602,7 @@ const Engine = (() => {
     if (CAPEX != null || AQ != null) {
       if (ctx.dfc['DFC.CAPEX']) evidencia(ctx, 'DFC', 'Aquisição de imobilizado e intangível', ctx.dfc['DFC.CAPEX'].v);
       if (ctx.dfc['DFC.AQ']) evidencia(ctx, 'DFC', 'Aquisição de empresas e participações', ctx.dfc['DFC.AQ'].v);
-      s += ` A DFC registra, ${faixa(ctx.Lb, i0, i1)}, ${CAPEX ? `${ctx.rs(CAPEX)} em compras de imobilizado e intangível` : 'nenhuma compra relevante de imobilizado'}${AQ ? ` e ${ctx.rs(AQ)} em aquisição de empresas, o que costuma explicar saltos no intangível (ágio e marcas das empresas compradas)` : ''}; a diferença para a variação do balanço vem da depreciação, da amortização e de ajustes de câmbio.`;
+      s += ` A DFC registra, ${faixa(ctx.Lb, i0, i1)}, ${[CAPEX ? `${ctx.rs(CAPEX)} em compras de imobilizado e intangível` : '', AQ ? `${ctx.rs(AQ)} em aquisição de empresas, o que costuma explicar saltos no intangível (ágio e marcas das empresas compradas)` : ''].filter(Boolean).join(' e ')}; a diferença para a variação do balanço vem da depreciação, da amortização e de ajustes de câmbio.`;
     }
     return s;
   }

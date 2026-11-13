@@ -382,8 +382,14 @@ def resumo_dfc(lista_contas):
         dep = [c for c in op if "DEPRECI" in sem_acento(contas[c][0]) or "AMORTIZ" in sem_acento(contas[c][0])]
         if dep:
             put("DFC.DEP", contas[dep[0]][0], dep[0], i, sum(contas[c][1] for c in dep))
-        capex = [c for c in filhos("6.02") if any(k in sem_acento(contas[c][0]) for k in ("IMOBILIZ", "INTANG"))
-                 and any(k in sem_acento(contas[c][0]) for k in ("AQUISI", "ADICO", "ADICA", "COMPRA", "INVESTIMENTO EM", "AUMENTO D"))]
+        def eh_capex(nome):
+            n = sem_acento(nome).strip(" .:")
+            if not any(k in n for k in ("IMOBILIZ", "INTANG")) or any(k in n for k in ("VENDA", "RECEB", "ALIENA", "BAIXA")):
+                return False
+            # "Aquisição de imobilizado", "Adições ao intangível"... ou a linha só com o nome do grupo ("Imobilizado")
+            return (any(k in n for k in ("AQUISI", "ADICO", "ADICA", "COMPRA", "INVESTIMENTO EM", "AUMENTO D"))
+                    or re.fullmatch(r"(ATIVO )?(IMOBILIZADO|INTANGIVEL)( E (ATIVO )?(IMOBILIZADO|INTANGIVEL))?", n) is not None)
+        capex = [c for c in filhos("6.02") if eh_capex(contas[c][0]) and (contas[c][1] or 0) <= 0]
         if capex:
             put("DFC.CAPEX", "Aquisição de imobilizado e intangível (CAPEX)", ",".join(capex), i, sum(contas[c][1] for c in capex))
         aq = [c for c in filhos("6.02") if "AQUISI" in sem_acento(contas[c][0]) and c not in capex

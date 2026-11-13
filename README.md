@@ -8,7 +8,7 @@ Página web que analisa o balanço patrimonial e a DRE de companhias abertas com
 4. aponta as contas que explicam o movimento;
 5. redige o parágrafo interpretativo, cruzando o índice com as contas do balanço, a DRE e a DFC.
 
-A pessoa escolhe a empresa em **Trocar empresa**, numa lista com todas as companhias abertas da CVM, e define o intervalo de anos ao lado do nome da empresa. Também dá para digitar ou importar os dados de qualquer empresa (menu **⋯**).
+Na página explorar, a pessoa escolhe a empresa em **Trocar empresa**, numa lista com todas as companhias abertas da CVM, e define o intervalo de anos ao lado do nome da empresa. Também dá para digitar ou importar os dados de qualquer empresa (menu **⋯**).
 
 Abas da página:
 
@@ -22,7 +22,7 @@ Abas da página:
 
 Em todas as abas, os valores sublinhados mostram a fórmula e o cálculo. No computador, passar o mouse mostra um resumo e clicar abre a lista completa das contas; no celular, o toque abre um painel na parte de baixo da tela.
 
-A página abre com a WEG (últimos três exercícios) na primeira visita e depois lembra a última empresa consultada. No menu **Exportar**, **PDF**, **Word** e **CSV** geram o arquivo da aba que estiver aberta; **Imprimir** usa a impressão do navegador. O PDF é montado no próprio navegador com as bibliotecas jsPDF e AutoTable, carregadas só quando o botão é usado.
+A página explorar abre com a WEG (últimos três exercícios) na primeira visita e depois lembra a última empresa consultada. No menu **Exportar**, **PDF**, **Word** e **CSV** geram o arquivo da aba que estiver aberta; **Imprimir** usa a impressão do navegador. O PDF é montado no próprio navegador com as bibliotecas jsPDF e AutoTable, carregadas só quando o botão é usado.
 
 Tudo é gratuito: os dados vêm do Portal de Dados Abertos da CVM, e o site roda no GitHub Pages.
 
@@ -44,15 +44,16 @@ CVM (dados.cvm.gov.br)                     GitHub Actions, toda segunda-feira
 | Arquivo | O que faz |
 |---|---|
 | `index.html`, `app.js` | Interface: busca de empresas, períodos, abas, dicas de cálculo e exportação |
-| `porta.js` | Tela de senha, usada só quando o site é publicado com senha |
+| `trabalho.js` | Trabalho do grupo: capa, caracterização da WEG, textos do grupo e combinados, interpretação, conclusão e referências |
+| `textos.js` | Preenche os marcadores dos textos com os números do site e gera o texto no estilo do grupo |
+| `relatorio.js` | Relatório ABNT em PDF e Word, carregado só quando o botão é usado |
 | `engine.js` | Motor: índices, decomposição, seleção de contas, textos, AV/AH e conclusão integrada |
 | `pipeline/cvm.py` | Rotina que baixa e processa os arquivos da CVM (só biblioteca padrão do Python) |
 | `pipeline/test_cvm.py` | Teste da rotina com arquivos montados no layout da CVM |
-| `pipeline/proteger.js` | Criptografa o código do site com as senhas dos Secrets (etapa opcional do workflow) |
 | `tests/cia-grega.json` | Gabarito de um caso didático (Cia Grega), conferido a cada atualização |
 | `tests/weg-digitada.json` | WEG digitada a partir dos PDFs, usada para conferir a rotina da CVM |
 | `tests/engine.test.js` | Testes do motor (gabarito da Cia Grega, coerência CVM × WEG digitada, DFC e detalhe dos cálculos) |
-| `tests/proteger.test.js` | Teste da proteção com senha |
+| `tests/textos.test.js` | Teste dos textos do trabalho e do gerador no estilo do grupo |
 | `.github/workflows/publicar.yml` | Roda os testes, atualiza os dados e publica o site |
 
 ## Como o texto de cada índice é montado
@@ -99,23 +100,31 @@ Depois disso, os dados se atualizam sozinhos toda segunda-feira. Para rodar fora
 
 Se uma execução falhar, o site continua com a última versão publicada. O log da etapa *Baixar e processar as DFPs da CVM* mostra quantas linhas foram lidas por ano e quantas empresas foram geradas.
 
-## Acesso com senha (opcional)
+## Página do trabalho e página explorar
 
-Sem configuração, o site fica aberto. Para exigir senha, crie dois Secrets no repositório (**Settings → Secrets and variables → Actions → New repository secret**) e rode o workflow de novo:
+O site tem duas páginas com o mesmo motor:
 
-| Secret | Quem usa | O que libera |
+| Página | Endereço | O que faz |
 |---|---|---|
-| `SENHA_ADMIN` | Você | Tudo: trocar empresa e período, abas Dados e Parâmetros, importar, gerar links de leitura |
-| `SENHA_LEITURA` | O grupo (opcional) | A empresa e os anos que você fixou no link: todas as abas e a exportação; Dados e Parâmetros podem ser alterados para testar, sem trocar de empresa |
+| Trabalho do grupo | `.../analisador-demonstracoes/` | Abre direto na WEG, 2023 a 2025. Não troca de empresa nem de anos; Dados e Parâmetros só para ver. Traz a caracterização da empresa, os textos do grupo e o relatório ABNT |
+| Explorar | `.../analisador-demonstracoes/explorar.html` | Qualquer companhia da CVM, qualquer intervalo de anos, dados e parâmetros editáveis. Nenhum link da página do trabalho leva até ela |
 
-Como fixar a análise do grupo: entre com a senha de administrador, escolha a empresa, o período e os parâmetros, abra o menu **⋯** e use **Copiar link de leitura**. Quem abrir esse link com a senha de leitura vê essa análise e não consegue trocar de empresa, mudar os anos, importar ou colar dados de outra empresa. Mudanças nos valores e nos parâmetros ficam só no navegador de quem as fez. O navegador lembra o último link válido.
+A página explorar é gerada pelo workflow a partir do `index.html`, sem a linha que carrega o `trabalho.js`.
 
-Como funciona: o workflow junta `engine.js` e `app.js` e os criptografa (AES-GCM, chave derivada da senha com PBKDF2). O site publicado só tem `porta.js` e o código cifrado; sem senha, a página não funciona. Para trocar a senha, edite o Secret e rode o workflow; quem tinha marcado "Lembrar neste navegador" precisa digitar a senha nova.
+**Texto da análise.** Na aba Análise, um seletor troca o texto de cada índice:
 
-Limites:
-- Os dados da CVM (`data/`) continuam públicos, como já são no portal da CVM.
-- O modo leitura bloqueia a troca de empresa, mas quem entende de programação e tem a senha de leitura consegue contornar esse bloqueio no próprio navegador. É uma barreira para colegas, não um cofre.
-- Com o repositório público, o código-fonte fica visível no GitHub. Para escondê-lo, deixe o repositório privado: o GitHub Pages em repositório privado exige GitHub Pro, que é gratuito para estudantes pelo GitHub Student Developer Pack. O site continua no mesmo endereço.
+| Opção | Onde aparece | O que é |
+|---|---|---|
+| Combinado | Trabalho | O jeito de escrever do grupo com os números e os cruzamentos do sistema (padrão) |
+| Texto do grupo | Trabalho | Os textos escritos pelo grupo, corrigidos onde os números não confirmavam a explicação; índices sem texto do grupo usam o do sistema |
+| Sistema | As duas | O texto gerado pelas regras do motor |
+| Estilo do grupo (automático) | As duas | Gerador que escreve no estilo do grupo para qualquer empresa, para validação |
+
+Os textos escritos à mão ficam em `trabalho.js` e usam marcadores como `{{v:LC}}` ou `{{rs:AC.EST@2025}}`, preenchidos com os números calculados pelo site (`textos.js`). Assim o texto nunca diverge da tabela. O teste `tests/textos.test.js` falha se algum marcador ficar sem valor.
+
+**Relatório ABNT.** No menu **Exportar**, **Relatório em PDF** e **Relatório em Word** geram o trabalho completo com o texto escolhido no seletor: capa, folha de rosto, resumo, listas de tabelas, gráficos e siglas, sumário, introdução, caracterização da empresa, análise por grupo de índices (tabela, gráfico e interpretação de cada índice), interpretação dos resultados, conclusão, referências e apêndices com o balanço, a DRE e a DFC. Segue a NBR 14724 (margens de 3 e 2 cm, Times 12, entrelinha 1,5, numeração a partir da introdução, contada desde a folha de rosto), a NBR 6023 (referências), a NBR 6024 (numeração das seções), a NBR 6027 (sumário), a NBR 6028 (resumo) e as normas tabulares do IBGE (título acima, fonte abaixo, sem linhas verticais).
+
+No Word, o sumário e as listas são campos: ao abrir o arquivo, aceite **atualizar os campos**. No LibreOffice, use **Ferramentas → Atualizar → Atualizar tudo**.
 
 ## Rodar no próprio computador
 
@@ -130,7 +139,7 @@ Os testes rodam sem internet:
 ```bash
 python3 pipeline/test_cvm.py
 node tests/engine.test.js
-node tests/proteger.test.js
+node tests/textos.test.js
 ```
 
 ## Plano de contas

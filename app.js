@@ -5,15 +5,15 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtN = E.fmtN;
 const clone = o => JSON.parse(JSON.stringify(o));
-// Acesso: sem senha (site aberto), administrador ou leitura. window.ACESSO é definido por porta.js
-// quando o site é publicado com senha (pipeline/proteger.js).
-const ACESSO = window.ACESSO || null;
-const LEITURA = !!ACESSO && ACESSO.modo === 'leitura';
-const ADMIN = !!ACESSO && ACESSO.modo === 'admin';
-const CHAVE = LEITURA ? 'analisador-dc-leitura' : 'analisador-dc-v3';
-const CHAVE_LINK = 'analisador-dc-link';
-let LINK = null;          // análise fixada pelo link de leitura: { c, de, ate, p }
-let LINK_TOK = null;
+// Página do trabalho (index.html carrega trabalho.js): empresa e anos fixos, abas Dados e Parâmetros só para ver.
+// Página explorar.html: sem trabalho.js, qualquer companhia da CVM.
+const TRABALHO = window.TRABALHO || null;
+const FIXO = !!TRABALHO;
+const TX = window.Textos;
+const CHAVE = FIXO ? 'analisador-dc-trabalho' : 'analisador-dc-v3';
+const ESTILOS = FIXO
+  ? [['combinado', 'Combinado'], ['grupo', 'Texto do grupo'], ['sistema', 'Sistema'], ['auto', 'Estilo do grupo (automático)']]
+  : [['sistema', 'Sistema'], ['auto', 'Estilo do grupo (automático)']];
 const CD_INICIAL = '5410'; // WEG: empresa aberta na primeira visita
 const BASE_URL = 'data/';
 // Fora do Claude (GitHub Pages, servidor local ou arquivo aberto no computador) os downloads funcionam.
@@ -30,23 +30,22 @@ function casoBranco() {
   };
 }
 
-let state = { caso: { ...casoBrancoInicial(), empresa: 'Carregando…' }, params: { ...E.PADRAO }, aba: 'analise', editado: false, cvm: null };
+let state = { caso: { ...casoBrancoInicial(), empresa: 'Carregando…' }, params: { ...E.PADRAO }, aba: 'analise', editado: false, cvm: null, estilo: ESTILOS[0][0] };
 let restaurado = false;
 let R = null;
 let BASE = null;          // empresas.json
 let DOC = null;           // arquivo da empresa escolhida na base CVM
 
 function salvar() {
-  try { localStorage.setItem(CHAVE, JSON.stringify({ caso: state.caso, params: state.params, editado: state.editado, aba: state.aba, cvm: state.cvm, evDoc: state.evDoc, link: LINK_TOK })); } catch (e) { }
+  try { localStorage.setItem(CHAVE, JSON.stringify(FIXO ? { aba: state.aba, evDoc: state.evDoc, estilo: state.estilo } : { caso: state.caso, params: state.params, editado: state.editado, aba: state.aba, cvm: state.cvm, evDoc: state.evDoc, estilo: state.estilo })); } catch (e) { }
 }
-let SALVO_LEITURA = null; // no modo leitura, as edições valem para o link em que foram feitas
 function carregar() {
   try {
     const s = JSON.parse(localStorage.getItem(CHAVE) || 'null');
-    if (LEITURA) {
+    if (s && ESTILOS.some(([k]) => k === s.estilo)) state.estilo = s.estilo;
+    if (FIXO) {
       if (s && ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'].includes(s.aba)) state.aba = s.aba;
       if (s && s.evDoc === false) state.evDoc = false;
-      SALVO_LEITURA = s;
       return;
     }
     if (s && s.caso && Array.isArray(s.caso.contas)) {
@@ -111,14 +110,7 @@ async function carregarBase() {
       ? `Base de demonstração com ${n} companhia. A base completa, com todas as companhias abertas, é gerada pela atualização semanal no GitHub.`
       : `${n.toLocaleString('pt-BR')} companhias abertas com balanço e DRE na CVM (${faixaAnos()}), atualizado em ${data}.`;
     $('#rodape').innerHTML = `Dados: <a href="https://dados.cvm.gov.br/dataset/cia_aberta-doc-dfp" target="_blank" rel="noopener">CVM, Portal de Dados Abertos</a> (licença ODbL). Os textos são gerados por regras e devem ser revisados antes de entregar.`;
-    if (LEITURA) {
-      const c = LINK || { c: CD_INICIAL };
-      await abrirEmpresa(c.c, c.de, c.ate, true);
-      const sv = SALVO_LEITURA;
-      if (sv && sv.link === LINK_TOK && sv.editado && sv.caso && Array.isArray(sv.caso.contas) && sv.caso.cd_cvm === state.caso.cd_cvm) {
-        state.caso = sv.caso; state.editado = true; recalcular(); renderDados();
-      }
-    }
+    if (FIXO) abrirEmpresa(TRABALHO.empresa, TRABALHO.de, TRABALHO.ate, true);
     else if (state.cvm && state.caso.preset === 'cvm') abrirEmpresa(state.cvm.c, state.cvm.de, state.cvm.ate, true);
     else if (!restaurado) {
       const ini = BASE.empresas.find(e => e.c === CD_INICIAL && !e.fin) || BASE.empresas.find(e => !e.fin && e.a.length);
@@ -216,7 +208,7 @@ function montarPeriodos(de, ate) {
   const ops = DOC.periodos.map((p, i) => `<option value="${i}">${esc(p.rotulo)}</option>`).join('');
   $('#per-de').innerHTML = ops; $('#per-ate').innerHTML = ops;
   $('#per-de').value = String(de); $('#per-ate').value = String(ate);
-  $('#periodos').hidden = LEITURA;
+  $('#periodos').hidden = FIXO;
 }
 function aplicarEmpresa(de, ate) {
   state.caso = E.casoDaBase(DOC, de, ate);
@@ -656,7 +648,7 @@ function recalcular() {
   const cvm = state.caso.preset === 'cvm';
   if (!cvm) $('#periodos').hidden = true;
   const faixa = `${p[0]}${p.length > 1 ? ' a ' + p[p.length - 1] : ''}`;
-  const per = cvm && LEITURA ? `${esc(faixa)} · ` : cvm ? `<span class="so-impressao">${esc(faixa)} · </span>` : `${esc(`${p.length} ${p.length === 1 ? 'período' : 'períodos'} (${faixa})`)} · `;
+  const per = cvm && FIXO ? `${esc(faixa)} · ` : cvm ? `<span class="so-impressao">${esc(faixa)} · </span>` : `${esc(`${p.length} ${p.length === 1 ? 'período' : 'períodos'} (${faixa})`)} · `;
   $('#meta-caso').innerHTML = per + esc(`${origem} · parâmetros ${padrao ? 'padrão' : 'personalizados'}${state.editado ? ' · dados editados' : ''}`);
   TIPS.clear(); esconderDica();
   renderAnalise(); renderMapa(); renderEstrutura(); renderDemo();
@@ -690,15 +682,57 @@ function fichaEmpresa() {
   return L;
 }
 const urlSite = s => /^https?:\/\//i.test(s) ? s : 'https://' + s.replace(/^\/+/, '');
+// ---------- textos: sistema, grupo, combinado e estilo do grupo (automático) ----------
+// Os textos do trabalho só valem para a empresa e os anos do trabalho (com os dados ainda carregando, usa o do sistema).
+const trabalhoPronto = () => FIXO && state.caso.cd_cvm === TRABALHO.empresa && state.caso.periodos[0] === TRABALHO.de && state.caso.periodos[state.caso.periodos.length - 1] === TRABALHO.ate;
+const preencher = t => TX.preencher(t, state.caso, R);
+const estiloTrabalho = () => trabalhoPronto() && (state.estilo === 'combinado' || state.estilo === 'grupo');
+function textoIndice(i) {
+  if (state.estilo === 'auto') return TX.estiloGrupo(i, R, state.caso);
+  if (estiloTrabalho()) { const t = TRABALHO[state.estilo][i.id]; if (t) return preencher(t); }
+  return i.texto;
+}
+const usaTextoSistema = i => estiloTrabalho() && !TRABALHO[state.estilo][i.id];
+function seletorEstilo() {
+  return `<div class="estilos" role="radiogroup" aria-label="Texto da análise"><span class="estilos-rot">Texto da análise:</span>${ESTILOS.map(([k, n]) => `<label class="estilo"><input type="radio" name="estilo" value="${k}"${state.estilo === k ? ' checked' : ''}><span>${esc(n)}</span></label>`).join('')}</div>`;
+}
+document.addEventListener('change', e => {
+  if (e.target.name !== 'estilo') return;
+  state.estilo = e.target.value; const y = window.scrollY;
+  TIPS.clear(); renderAnalise(); salvar(); window.scrollTo(0, y);
+});
+// caracterização da empresa (página do trabalho)
+function htmlCaracterizacao() {
+  const C = TRABALHO.caracterizacao;
+  let h = `<section class="abertura" id="caracterizacao"><h2>Caracterização da empresa</h2>`;
+  h += `<dl class="ficha">${C.identificacao.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${/^https?:/.test(v) ? `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v.replace(/^https?:\/\//, ''))}</a>` : esc(v)}</dd></div>`).join('')}</dl>`;
+  for (const sec of C.secoes) {
+    h += `<h3>${esc(sec.titulo)}</h3>` + sec.paragrafos.map(t => `<p class="leitura">${esc(preencher(t))}</p>`).join('');
+    if (sec.itens) h += `<ul class="itens">${sec.itens.map(t => `<li>${esc(preencher(t))}</li>`).join('')}</ul>`;
+    if (sec.depois) h += sec.depois.map(t => `<p class="leitura">${esc(preencher(t))}</p>`).join('');
+  }
+  return h + `<p class="nota">${esc(C.fonteIdentificacao)} As referências completas estão no relatório.</p></section>`;
+}
+function htmlFechamento() {
+  if (estiloTrabalho()) {
+    let h = `<section class="conclusao" id="interpretacao"><h2>Interpretação dos resultados</h2>`;
+    for (const sec of TRABALHO.interpretacao) h += `<h3>${esc(sec.titulo)}</h3>` + sec.paragrafos.map(t => `<p class="leitura">${esc(preencher(t))}</p>`).join('');
+    h += `</section><section class="conclusao" id="conclusao"><h2>Conclusão</h2>${TRABALHO.conclusao.map(t => `<p class="leitura">${esc(preencher(t))}</p>`).join('')}</section>`;
+    return h;
+  }
+  return `<section class="conclusao"><h2>Conclusão integrada</h2><ul>${R.conclusao.map(c => `<li>${esc(c)}</li>`).join('')}</ul></section>`;
+}
 function renderAnalise() {
   const el = $('#p-analise'); const per = state.caso.periodos;
   let h = '';
   if (R.avisos.length) h += `<div class="aviso" role="status"><strong>Confira os dados antes de usar a análise</strong><ul>${R.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>`;
   if (per.length < 2) h += `<div class="aviso"><strong>Só um período selecionado.</strong> Os índices são calculados, mas a análise de evolução precisa de pelo menos dois períodos.</div>`;
-  h += `<div class="barra-acoes"><button class="btn primario" type="button" data-copiar="tudo">Copiar análise completa</button><span class="nota">Texto gerado por regras a partir dos números; revise antes de entregar. Os valores <span class="sublinhado">sublinhados</span> mostram a fórmula e o cálculo.</span></div>`;
+  h += seletorEstilo();
+  h += `<div class="barra-acoes"><button class="btn primario" type="button" data-copiar="tudo">Copiar análise completa</button><span class="nota">${state.estilo === 'auto' ? 'Estilo do grupo gerado automaticamente, para validação. ' : ''}Os números vêm dos cálculos do site; revise antes de entregar. Os valores <span class="sublinhado">sublinhados</span> mostram a fórmula e o cálculo.</span></div>`;
   h += `<div class="copia-fallback" id="copia-fallback" hidden><label for="ta-fallback" class="nota">A cópia automática foi bloqueada. Selecione e copie:</label><textarea id="ta-fallback" readonly></textarea></div>`;
   if (state.caso.fonte) h += `<p class="nota">Fonte: ${esc(state.caso.fonte)}</p>`;
-  if (R.abertura) {
+  if (trabalhoPronto()) h += htmlCaracterizacao();
+  else if (R.abertura) {
     const ficha = fichaEmpresa();
     h += `<section class="abertura"><h2>Apresentação</h2>`;
     if (ficha.length) h += `<dl class="ficha">${ficha.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${k === 'Site' ? `<a href="${esc(urlSite(v))}" target="_blank" rel="noopener">${esc(v)}</a>` : esc(v)}</dd></div>`).join('')}</dl>`;
@@ -718,13 +752,14 @@ function renderAnalise() {
       h += `<article class="indice" id="ind-${i.id}"><div class="ind-cab"><span class="sigla">${i.id}</span><h3>${esc(nomeIndice(i))}</h3>${chip(i)}</div>`;
       h += `<div class="formula">${esc(i.formula)} · ${i.dir > 0 ? 'quanto maior, melhor' : 'quanto menor, melhor'}</div>`;
       h += `<div class="calculos">${i.calc.map((c, k) => `<span><b>${esc(per[k])}</b> <span${tip(tipIndice(i, k))}>${c ? esc(c) : 'não calculável'}</span></span>`).join('')}</div>`;
-      h += `<p class="leitura">${esc(i.texto)}</p>`;
+      h += `<p class="leitura">${esc(textoIndice(i))}</p>`;
+      if (usaTextoSistema(i)) h += `<p class="nota">O grupo não escreveu texto para este índice; foi usado o texto do sistema.</p>`;
       h += quadroEvidencia(i);
       h += `<div class="ind-acoes"><button class="btn mini" type="button" data-copiar="${i.id}">Copiar parágrafo</button></div></article>`;
     }
     h += `</section>`;
   }
-  h += `<section class="conclusao"><h2>Conclusão integrada</h2><ul>${R.conclusao.map(c => `<li>${esc(c)}</li>`).join('')}</ul></section>`;
+  h += htmlFechamento();
   el.innerHTML = h;
 }
 // quadro de conferência: contas e séries citadas no texto, com a variação no período
@@ -761,12 +796,19 @@ function quadroEvidencia(i) {
 function textoCompleto() {
   const L = [`Análise das demonstrações contábeis: ${state.caso.empresa || 'Empresa'}`, ''];
   if (state.caso.fonte) L.push('Fonte: ' + state.caso.fonte, '');
-  if (R.abertura) L.push(R.abertura, '');
+  if (trabalhoPronto()) {
+    L.push('CARACTERIZAÇÃO DA EMPRESA', ...TRABALHO.caracterizacao.identificacao.map(([k, v]) => `${k}: ${v}`), '');
+    for (const sec of TRABALHO.caracterizacao.secoes) L.push(sec.titulo, ...sec.paragrafos.map(preencher), ...(sec.itens || []).map(t => '• ' + preencher(t)), ...(sec.depois || []).map(preencher), '');
+  } else if (R.abertura) L.push(R.abertura, '');
   for (const g of R.grupos) {
     L.push(g.titulo.toUpperCase(), g.sintese, '');
-    for (const id of g.ids) { const i = R.by[id]; L.push(`${i.id}: ${nomeIndice(i)}`, i.texto, ''); }
+    for (const id of g.ids) { const i = R.by[id]; L.push(`${i.id}: ${nomeIndice(i)}`, textoIndice(i), ''); }
   }
-  L.push('CONCLUSÃO INTEGRADA', ...R.conclusao);
+  if (estiloTrabalho()) {
+    L.push('INTERPRETAÇÃO DOS RESULTADOS');
+    for (const sec of TRABALHO.interpretacao) L.push(sec.titulo, ...sec.paragrafos.map(preencher), '');
+    L.push('CONCLUSÃO', ...TRABALHO.conclusao.map(preencher));
+  } else L.push('CONCLUSÃO INTEGRADA', ...R.conclusao);
   return L.join('\n');
 }
 // ---------- AV e AH ----------
@@ -841,24 +883,18 @@ function renderDados() {
   h += `<details><summary class="btn mini" style="display:inline-flex">Colar dados em CSV</summary><div class="copia-fallback" style="margin-top:10px"><label for="ta-colar" class="nota">Uma linha por conta: <code>conta;classificação;valor1;valor2;…</code>. A linha de cabeçalho traz os períodos: <code>conta;classificacao;2023;2024;2025</code>. Classificações: ${E.CODIGOS.map(([c]) => c).join(', ')}. Use “*” no fim da classificação para conta já incluída (ex.: PC.FORN*). Uma linha <code>#empresa;Nome</code> define o nome.</label><textarea id="ta-colar" placeholder="conta;classificacao;2023;2024;2025"></textarea><div><button class="btn primario" type="button" id="btn-colar">Usar estes dados</button></div></div></details>`;
   el.innerHTML = h; travar(el);
 }
-// Modo leitura: Dados e Parâmetros podem ser editados para testar, mas a empresa e os anos
-// são os do link (sem importar, colar, caso em branco, renomear a empresa ou mudar os períodos).
+// Página do trabalho: Dados e Parâmetros ficam visíveis, sem edição, para o site bater com o relatório.
 function travar(el) {
-  if (!LEITURA) return;
-  if (el.id === 'p-dados') {
-    el.querySelectorAll('#d-empresa, input.periodo').forEach(i => { i.readOnly = true; i.title = 'Definido pelo link de leitura'; });
-    el.querySelectorAll('#btn-add-periodo, #btn-rem-periodo, details').forEach(x => { x.hidden = true; });
-    el.insertAdjacentHTML('afterbegin', `<div class="aviso">Você pode alterar valores e classificações para testar. As mudanças ficam só neste navegador; a empresa e os anos são os do link de leitura. <button class="btn mini" type="button" id="btn-restaurar-link">Restaurar os dados originais</button></div>`);
-  } else {
-    const b = el.querySelector('#btn-padrao');
-    if (b && LINK && LINK.p && Object.keys(LINK.p).length) b.textContent = 'Voltar aos parâmetros do link';
-    el.insertAdjacentHTML('afterbegin', `<p class="aviso">As mudanças nos parâmetros ficam só neste navegador e não mudam o que o restante do grupo vê.</p>`);
-  }
+  if (!FIXO) return;
+  el.querySelectorAll('input[type=text], textarea').forEach(i => { i.readOnly = true; });
+  el.querySelectorAll('select, input[type=checkbox]').forEach(i => { i.disabled = true; });
+  el.querySelectorAll('.barra-acoes, [data-add], [data-rem], details, #btn-padrao').forEach(x => { x.hidden = true; });
+  el.insertAdjacentHTML('afterbegin', `<p class="aviso">Somente visualização: ${el.id === 'p-params' ? 'estes são os parâmetros usados' : 'estes são os dados usados'} na análise e no relatório do trabalho.</p>`);
 }
 function editado() { state.editado = true; if (state.caso.preset === 'cvm') state.caso.preset = 'cvm-editado'; }
 $('#p-dados').addEventListener('change', e => {
   const t = e.target; const c = state.caso;
-  if (LEITURA && (t.id === 'd-empresa' || t.dataset.per != null || t.id === 'ta-colar')) return;
+  if (FIXO) return;
   if (t.id === 'd-empresa') c.empresa = t.value.trim();
   else if (t.id === 'd-ei') { c.extras = c.extras || {}; const v = parseBR(t.value); c.extras.estoqueInicial = v == null ? '' : v; t.value = fmtInput(v); }
   else if (t.dataset.per != null) c.periodos[+t.dataset.per] = t.value.trim() || `Período ${+t.dataset.per + 1}`;
@@ -871,11 +907,7 @@ $('#p-dados').addEventListener('change', e => {
 });
 $('#p-dados').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return; const c = state.caso;
-  if (LEITURA && b.id === 'btn-restaurar-link') {
-    const l = LINK || { c: CD_INICIAL };
-    abrirEmpresa(l.c, l.de, l.ate, true).then(() => toast('Dados originais restaurados')); return;
-  }
-  if (LEITURA && ['btn-add-periodo', 'btn-rem-periodo', 'btn-colar'].includes(b.id)) return;
+  if (FIXO) return;
   if (b.dataset.add) {
     const cod = E.CODIGOS.find(([k]) => k.startsWith(b.dataset.add + '.') && /OUT$|LL$/.test(k)) || E.CODIGOS.find(([k]) => k.startsWith(b.dataset.add + '.'));
     c.contas.push({ nome: 'Nova conta', cod: cod[0], v: c.periodos.map(() => null) });
@@ -1004,7 +1036,11 @@ async function documentoDaAba() {
   const par = (t, nota) => B.push({ t: 'p', texto: t, nota });
   const tab = (cab, linhas, o = {}) => B.push({ t: 'tab', cab, linhas, dir: o.dir || [], neg: o.neg || [], recuo: o.recuo || [], larga: o.larga });
   if (aba === 'analise') {
-    if (R.abertura) { sub('Apresentação'); const f = fichaEmpresa(); if (f.length) tab(['Item', 'Informação'], f); par(R.abertura); }
+    if (trabalhoPronto()) {
+      const C = TRABALHO.caracterizacao;
+      sub('Caracterização da empresa'); tab(['Item', 'Informação'], C.identificacao);
+      for (const sec of C.secoes) { h3(sec.titulo); sec.paragrafos.forEach(t => par(preencher(t))); (sec.itens || []).forEach(t => par('• ' + preencher(t))); (sec.depois || []).forEach(t => par(preencher(t))); }
+    } else if (R.abertura) { sub('Apresentação'); const f = fichaEmpresa(); if (f.length) tab(['Item', 'Informação'], f); par(R.abertura); }
     for (const g of R.grupos) {
       const its = g.ids.map(id => R.by[id]);
       sub(g.titulo);
@@ -1012,15 +1048,18 @@ async function documentoDaAba() {
         { dir: per.map((_, k) => k + 2) });
       par(g.sintese, true);
       for (const i of its) {
-        h3(`${nomeIndice(i)} (${i.id})`); par(i.texto);
+        h3(`${nomeIndice(i)} (${i.id})`); par(textoIndice(i));
         if (state.evDoc !== false && i.evidencias.length) {
           const ls = linhasEvidencia(i);
           tab(['Fonte', 'Conta', ...per, 'Variação'], ls.map(l => [l.fonte, l.nome, ...l.vals, l.variacao]), { dir: per.map((_, k) => k + 2).concat(per.length + 2) });
         }
       }
     }
-    sub('Conclusão integrada');
-    R.conclusao.forEach(c => par('• ' + c));
+    if (estiloTrabalho()) {
+      sub('Interpretação dos resultados');
+      for (const sec of TRABALHO.interpretacao) { h3(sec.titulo); sec.paragrafos.forEach(t => par(preencher(t))); }
+      sub('Conclusão'); TRABALHO.conclusao.forEach(t => par(preencher(t)));
+    } else { sub('Conclusão integrada'); R.conclusao.forEach(c => par('• ' + c)); }
   } else if (aba === 'mapa') {
     const k = state.mapaK != null ? state.mapaK : per.length - 1;
     const d = estruturaDados(k);
@@ -1173,6 +1212,29 @@ $('#btn-pdf').addEventListener('click', async () => {
 });
 $('#btn-imprimir').addEventListener('click', () => { esconderDica(); setTimeout(() => window.print(), 50); });
 
+// ---------- relatório completo (ABNT), em PDF ou Word, com os mesmos números e textos do site ----------
+const nomeEstilo = () => (ESTILOS.find(([k]) => k === state.estilo) || ESTILOS[0])[1];
+async function gerarRelatorio(formato) {
+  esconderDica();
+  toast(formato === 'docx' ? 'Gerando o relatório em Word…' : 'Gerando o relatório em PDF…');
+  try {
+    if (!window.Relatorio) await carregarScript('relatorio.js');
+    const api = {
+      state, R, TRABALHO, trabalhoPronto, estiloTrabalho, preencher, textoIndice, nomeIndice, fichaEmpresa, fmtR,
+      dadosDemo: demo => dadosDemo(demo), carregarScript, nomeEstilo: nomeEstilo()
+    };
+    const blob = await window.Relatorio.gerar(api, formato);
+    const base = `relatorio-analise-${slug(state.caso.empresa)}-${state.caso.periodos[0]}-${state.caso.periodos[state.caso.periodos.length - 1]}`;
+    baixar(`${base}.${formato === 'docx' ? 'docx' : 'pdf'}`, blob, formato === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf');
+    toast(formato === 'docx' ? 'Relatório em Word gerado' : 'Relatório em PDF gerado');
+  } catch (e) {
+    console.error(e);
+    toast('Não foi possível gerar o relatório. Verifique a conexão e tente de novo.');
+  }
+}
+$('#btn-rel-pdf').addEventListener('click', () => gerarRelatorio('pdf'));
+$('#btn-rel-word').addEventListener('click', () => gerarRelatorio('docx'));
+
 $('#btn-copiar-csv').addEventListener('click', async () => { const r = await csvDaAba(); copiar(r.texto, r.rotulo); });
 $('#btn-csv').addEventListener('click', async () => { const r = await csvDaAba(); baixar(r.nome, '\ufeff' + r.texto, 'text/csv;charset=utf-8'); });
 $('#btn-json').addEventListener('click', () => baixar(`caso-${slug(state.caso.empresa)}.json`, JSON.stringify({ caso: state.caso, params: state.params }, null, 1), 'application/json'));
@@ -1238,7 +1300,7 @@ $('#p-params').addEventListener('change', e => {
   state.params[k] = v; recalcular();
 });
 $('#p-params').addEventListener('click', e => {
-  if (e.target.id === 'btn-padrao') { state.params = { ...E.PADRAO, ...(LEITURA && LINK ? LINK.p || {} : {}) }; renderParams(); recalcular(); toast('Parâmetros restaurados'); }
+  if (e.target.id === 'btn-padrao') { state.params = { ...E.PADRAO }; renderParams(); recalcular(); toast('Parâmetros restaurados'); }
 });
 
 // ---------- abas e cópia ----------
@@ -1257,65 +1319,29 @@ document.querySelector('nav.abas').addEventListener('click', e => { const b = e.
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-copiar]'); if (!b) return;
   const k = b.dataset.copiar;
-  copiar(k === 'tudo' ? textoCompleto() : k === 'abertura' ? R.abertura : R.by[k].texto, k === 'tudo' ? 'Análise' : 'Parágrafo');
+  copiar(k === 'tudo' ? textoCompleto() : k === 'abertura' ? R.abertura : textoIndice(R.by[k]), k === 'tudo' ? 'Análise' : 'Parágrafo');
 });
 
-// ---------- acesso: link de leitura ----------
-const b64url = u8 => btoa(String.fromCharCode(...u8)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const deB64url = t => Uint8Array.from(atob(t.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-async function gerarLink() {
-  const p = state.caso.periodos;
-  const dif = Object.fromEntries(Object.entries(state.params).filter(([k, v]) => v !== E.PADRAO[k]));
-  const dados = new TextEncoder().encode(JSON.stringify({ c: state.cvm.c, de: p[0], ate: p[p.length - 1], p: dif }));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, ACESSO.chave, dados));
-  const tudo = new Uint8Array(iv.length + ct.length); tudo.set(iv); tudo.set(ct, iv.length);
-  return `${location.origin}${location.pathname}#l=${b64url(tudo)}`;
-}
-async function lerLink() {
-  const doHash = (location.hash.match(/[#&]l=([\w-]+)/) || [])[1];
-  let salvo = null; try { salvo = localStorage.getItem(CHAVE_LINK); } catch (e) { }
-  for (const tok of [doHash, salvo]) {
-    if (!tok) continue;
-    try {
-      const u = deB64url(tok);
-      const txt = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, ACESSO.chave, u.slice(12)));
-      const l = JSON.parse(txt);
-      try { localStorage.setItem(CHAVE_LINK, tok); } catch (e) { }
-      LINK_TOK = tok;
-      return l;
-    } catch (e) { if (tok === doHash) setTimeout(() => toast('Link de leitura inválido'), 400); }
-  }
-  return null;
-}
-$('#btn-link').addEventListener('click', async () => {
-  if (state.caso.preset !== 'cvm' || !state.cvm) { toast('O link de leitura funciona com empresas da base da CVM'); return; }
-  const url = await gerarLink();
-  copiar(url, `Link de leitura (${state.caso.empresa}, ${state.caso.periodos[0]} a ${state.caso.periodos[state.caso.periodos.length - 1]})`);
+// ---------- links internos: rolar sem mudar o endereço (evita o salto para o topo) ----------
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[href^="#"]'); if (!a) return;
+  const alvo = document.getElementById(decodeURIComponent(a.getAttribute('href').slice(1))); if (!alvo) return;
+  e.preventDefault();
+  alvo.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  if (alvo.tabIndex < 0) alvo.setAttribute('tabindex', '-1');
+  alvo.focus({ preventScroll: true });
 });
-$('#btn-sair').addEventListener('click', () => ACESSO && ACESSO.sair());
-function aplicarAcesso() {
-  document.documentElement.dataset.acesso = LEITURA ? 'leitura' : ADMIN ? 'admin' : 'livre';
-  document.querySelectorAll('.so-admin').forEach(el => { el.hidden = !ADMIN; });
-  $('#btn-sair').hidden = !ACESSO;
-  if (LEITURA) {
-    for (const id of ['#btn-trocar', '#btn-json', 'label[for="arq-importar"]', '#btn-branco']) { const el = $(id); if (el) el.hidden = true; }
-    window.addEventListener('hashchange', () => location.reload());
-  }
+
+function aplicarModo() {
+  document.documentElement.dataset.modo = FIXO ? 'trabalho' : 'livre';
+  if (FIXO) for (const id of ['#btn-trocar', '#btn-json', '#menu-mais']) { const el = $(id); if (el) el.hidden = true; }
+  // o relatório é gerado no navegador com bibliotecas externas: só onde a exportação funciona
+  for (const id of ['#btn-rel-pdf', '#btn-rel-word', '#sep-rel']) { const el = $(id); if (el) el.hidden = !PODE_EXPORTAR; }
+  if (PODE_EXPORTAR) { const rot = $('#sep-rel') && $('#sep-rel').nextElementSibling; if (rot) rot.hidden = false; } else { const rot = $('#sep-rel') && $('#sep-rel').nextElementSibling; if (rot) rot.hidden = true; }
 }
 
-(async () => {
-  aplicarAcesso();
-  carregar();
-  if (LEITURA) {
-    LINK = await lerLink();
-    state.params = { ...E.PADRAO, ...(LINK ? LINK.p || {} : {}) };
-    // parâmetros que a pessoa mudou neste mesmo link continuam valendo
-    const sv = SALVO_LEITURA;
-    if (sv && sv.link === LINK_TOK && sv.params) state.params = { ...E.PADRAO, ...sv.params };
-    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
-  }
-  recalcular(); renderDados(); renderParams(); irAba(state.aba);
-  carregarBase();
-})();
+aplicarModo();
+carregar();
+recalcular(); renderDados(); renderParams(); irAba(state.aba);
+carregarBase();
 })();
