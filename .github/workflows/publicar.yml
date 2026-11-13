@@ -40,7 +40,7 @@ jobs:
       - name: Baixar e processar as DFPs da CVM
         run: |
           mkdir -p _site
-          cp index.html app.js engine.js textos.js trabalho.js relatorio.js _site/
+          cp *.html *.js _site/
           # explorar.html: a mesma página sem o trabalho do grupo (qualquer companhia da CVM)
           grep -v 'data-trabalho' index.html > _site/explorar.html
           touch _site/.nojekyll
