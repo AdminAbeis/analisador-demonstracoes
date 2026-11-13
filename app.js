@@ -10,10 +10,15 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const TRABALHO = window.TRABALHO || null;
 const FIXO = !!TRABALHO;
 const TX = window.Textos;
-const CHAVE = FIXO ? 'analisador-dc-trabalho' : 'analisador-dc-v3';
+const CHAVE = FIXO ? 'analisador-dc-trabalho-v2' : 'analisador-dc-v3';
+const ABAS = ['trab', 'analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'];
+const E_SISTEMA = ['sistema', 'Texto do sistema', 'Texto gerado pelas regras do sistema, sem ajustes manuais.'];
+const E_AUTO = ['auto', 'Estilo do grupo, automático (em teste)', 'Gerador que escreve no estilo dos textos do grupo para qualquer empresa. Serve para o grupo validar.'];
 const ESTILOS = FIXO
-  ? [['combinado', 'Combinado'], ['grupo', 'Texto do grupo'], ['sistema', 'Sistema'], ['auto', 'Estilo do grupo (automático)']]
-  : [['sistema', 'Sistema'], ['auto', 'Estilo do grupo (automático)']];
+  ? [['combinado', 'Versão final do trabalho', 'Os textos do grupo reescritos com os números e os cruzamentos do sistema, para os 17 índices. É a versão do relatório entregue.'],
+     ['grupo', 'Texto original do grupo (corrigido)', 'Os textos que o grupo escreveu, com os erros de número corrigidos. Os índices que o grupo não escreveu usam o texto do sistema.'],
+     E_SISTEMA, E_AUTO]
+  : [E_SISTEMA, E_AUTO];
 const CD_INICIAL = '5410'; // WEG: empresa aberta na primeira visita
 const BASE_URL = 'data/';
 // Fora do Claude (GitHub Pages, servidor local ou arquivo aberto no computador) os downloads funcionam.
@@ -30,27 +35,28 @@ function casoBranco() {
   };
 }
 
-let state = { caso: { ...casoBrancoInicial(), empresa: 'Carregando…' }, params: { ...E.PADRAO }, aba: 'analise', editado: false, cvm: null, estilo: ESTILOS[0][0] };
+let state = { caso: { ...casoBrancoInicial(), empresa: 'Carregando…' }, params: { ...E.PADRAO }, aba: FIXO ? 'trab' : 'analise', editado: false, cvm: null, estilo: ESTILOS[0][0] };
 let restaurado = false;
 let R = null;
 let BASE = null;          // empresas.json
 let DOC = null;           // arquivo da empresa escolhida na base CVM
 
 function salvar() {
-  try { localStorage.setItem(CHAVE, JSON.stringify(FIXO ? { aba: state.aba, evDoc: state.evDoc, estilo: state.estilo } : { caso: state.caso, params: state.params, editado: state.editado, aba: state.aba, cvm: state.cvm, evDoc: state.evDoc, estilo: state.estilo })); } catch (e) { }
+  try { localStorage.setItem(CHAVE, JSON.stringify(FIXO ? { aba: state.aba, evDoc: state.evDoc, estilo: state.estilo, trabAbertos: state.trabAbertos } : { caso: state.caso, params: state.params, editado: state.editado, aba: state.aba, cvm: state.cvm, evDoc: state.evDoc, estilo: state.estilo })); } catch (e) { }
 }
 function carregar() {
   try {
     const s = JSON.parse(localStorage.getItem(CHAVE) || 'null');
     if (s && ESTILOS.some(([k]) => k === s.estilo)) state.estilo = s.estilo;
     if (FIXO) {
-      if (s && ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'].includes(s.aba)) state.aba = s.aba;
+      if (s && ABAS.includes(s.aba)) state.aba = s.aba;
       if (s && s.evDoc === false) state.evDoc = false;
+      if (s && Array.isArray(s.trabAbertos)) state.trabAbertos = s.trabAbertos;
       return;
     }
     if (s && s.caso && Array.isArray(s.caso.contas)) {
       state.caso = s.caso; state.params = { ...E.PADRAO, ...(s.params || {}) }; state.editado = !!s.editado;
-      state.cvm = s.cvm || null; if (s.aba && ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'].includes(s.aba)) state.aba = s.aba;
+      state.cvm = s.cvm || null; if (s.aba && ABAS.includes(s.aba)) state.aba = s.aba;
       if (s.evDoc === false) state.evDoc = false;
       restaurado = true;
     }
@@ -651,7 +657,7 @@ function recalcular() {
   const per = cvm && FIXO ? `${esc(faixa)} · ` : cvm ? `<span class="so-impressao">${esc(faixa)} · </span>` : `${esc(`${p.length} ${p.length === 1 ? 'período' : 'períodos'} (${faixa})`)} · `;
   $('#meta-caso').innerHTML = per + esc(`${origem} · parâmetros ${padrao ? 'padrão' : 'personalizados'}${state.editado ? ' · dados editados' : ''}`);
   TIPS.clear(); esconderDica();
-  renderAnalise(); renderMapa(); renderEstrutura(); renderDemo();
+  renderAnalise(); renderMapa(); renderEstrutura(); renderDemo(); renderTrabalho();
   salvar();
 }
 
@@ -694,12 +700,13 @@ function textoIndice(i) {
 }
 const usaTextoSistema = i => estiloTrabalho() && !TRABALHO[state.estilo][i.id];
 function seletorEstilo() {
-  return `<div class="estilos" role="radiogroup" aria-label="Texto da análise"><span class="estilos-rot">Texto da análise:</span>${ESTILOS.map(([k, n]) => `<label class="estilo"><input type="radio" name="estilo" value="${k}"${state.estilo === k ? ' checked' : ''}><span>${esc(n)}</span></label>`).join('')}</div>`;
+  const atual = ESTILOS.find(([k]) => k === state.estilo) || ESTILOS[0];
+  return `<div class="seletor-texto"><label>Versão do texto <select class="sel-estilo" aria-describedby="desc-estilo">${ESTILOS.map(([k, n]) => `<option value="${k}"${state.estilo === k ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label><span class="nota">${esc(atual[2])}</span></div>`;
 }
 document.addEventListener('change', e => {
-  if (e.target.name !== 'estilo') return;
+  if (!e.target.classList || !e.target.classList.contains('sel-estilo')) return;
   state.estilo = e.target.value; const y = window.scrollY;
-  TIPS.clear(); renderAnalise(); salvar(); window.scrollTo(0, y);
+  TIPS.clear(); renderAnalise(); renderTrabalho(); salvar(); window.scrollTo(0, y);
 });
 // caracterização da empresa (página do trabalho)
 function htmlCaracterizacao() {
@@ -722,6 +729,118 @@ function htmlFechamento() {
   }
   return `<section class="conclusao"><h2>Conclusão integrada</h2><ul>${R.conclusao.map(c => `<li>${esc(c)}</li>`).join('')}</ul></section>`;
 }
+// ---------- gráficos dos grupos (SVG, com valores ao passar o mouse ou tocar) ----------
+const SERIES_GRAF = { liq: ['LI', 'LC', 'LS', 'LG'], est: ['PCT', 'CE', 'IPL', 'IRNC'], rent: ['ML', 'RA', 'RPL'], ativ: ['PMRE', 'PMRV', 'PMPC', 'CO', 'CF'] };
+const TRACOS_GRAF = ['', '7 4', '2 4', '10 4 2 4', '1 4'];
+function marcadorSVG(k, x, y, r, cor) {
+  const f = `fill="${cor}" stroke="var(--surface)" stroke-width="2"`;
+  if (k % 4 === 0) return `<circle cx="${x}" cy="${y}" r="${r}" ${f}/>`;
+  if (k % 4 === 1) return `<rect x="${x - r}" y="${y - r}" width="${2 * r}" height="${2 * r}" ${f}/>`;
+  if (k % 4 === 2) return `<path d="M${x} ${y - r * 1.25}L${x + r * 1.15} ${y + r * 0.85}L${x - r * 1.15} ${y + r * 0.85}Z" ${f}/>`;
+  return `<path d="M${x} ${y - r * 1.3}L${x + r * 1.15} ${y}L${x} ${y + r * 1.3}L${x - r * 1.15} ${y}Z" ${f}/>`;
+}
+function graficoSVG(gid) {
+  const per = state.caso.periodos;
+  if (per.length < 2) return '';
+  const ids = (SERIES_GRAF[gid] || []).filter(id => R.by[id] && R.by[id].vals.some(v => v != null));
+  if (!ids.length) return '';
+  const W = 600, H = 270, pl = 50, pr = 112, pt = 14, pb = 30;
+  const vals = ids.flatMap(id => R.by[id].vals.filter(v => v != null));
+  let lo = Math.min(0, ...vals), hi = Math.max(...vals);
+  const bruto = (hi - lo) / 5 || 1, m = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const passo = [1, 2, 2.5, 5, 10].map(f => f * m).find(f => bruto <= f);
+  lo = Math.floor(lo / passo) * passo; hi = Math.ceil(hi / passo) * passo;
+  const X = k => pl + (W - pl - pr) * k / (per.length - 1), Y = v => H - pb - (H - pt - pb) * (v - lo) / (hi - lo);
+  const casas = gid === 'ativ' ? 0 : passo < 1 ? 2 : 0;
+  const unidade = { liq: '', est: '%', rent: '%', ativ: ' dias' }[gid] || '';
+  let h = `<svg class="graf" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`Evolução dos índices de ${R.grupos.find(g => g.id === gid).titulo.toLowerCase()}`)}">`;
+  for (let v = lo; v <= hi + passo / 2; v += passo) h += `<line class="grade${Math.abs(v) < 1e-9 ? ' zero' : ''}" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${pl - 8}" y="${Y(v) + 4}" text-anchor="end">${fmtN(v, casas)}</text>`;
+  per.forEach((p, k) => { h += `<text x="${X(k)}" y="${H - 8}" text-anchor="middle">${esc(p)}</text>`; });
+  const fins = [];
+  ids.forEach((id, k) => {
+    const i = R.by[id], cor = `var(--s${k + 1})`;
+    const pts = i.vals.map((v, j) => v == null ? null : [X(j), Y(v)]);
+    const d = pts.reduce((a, p, j) => p ? a + (a && pts[j - 1] ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1) : a, '');
+    h += `<path d="${d}" fill="none" stroke="${cor}" stroke-width="2.4"${TRACOS_GRAF[k] ? ` stroke-dasharray="${TRACOS_GRAF[k]}"` : ''}/>`;
+    pts.forEach((p, j) => { if (!p) return; h += `<g class="ponto"${tip({ titulo: `${nomeIndice(i)} (${i.id}) em ${per[j]}`, formula: i.formula, conta: i.calc[j] || '' })}><circle class="alvo" cx="${p[0]}" cy="${p[1]}" r="13" fill="transparent"/>${marcadorSVG(k, p[0], p[1], 5, cor)}</g>`; });
+    const u = i.vals.length - 1; if (i.vals[u] != null) fins.push({ y: Y(i.vals[u]), t: `${id} ${i.fmt[u]}${i.unid === 'd' ? ' d' : ''}` });
+  });
+  fins.sort((a, b) => a.y - b.y); for (let k = 1; k < fins.length; k++) if (fins[k].y - fins[k - 1].y < 17) fins[k].y = fins[k - 1].y + 17;
+  fins.forEach(f => { h += `<text class="rot" x="${W - pr + 12}" y="${f.y + 4}">${esc(f.t)}</text>`; });
+  h += `</svg>`;
+  const leg = ids.map((id, k) => `<span><svg width="30" height="12" aria-hidden="true"><line x1="1" x2="29" y1="6" y2="6" stroke="var(--s${k + 1})" stroke-width="2.4"${TRACOS_GRAF[k] ? ` stroke-dasharray="${TRACOS_GRAF[k]}"` : ''}/>${marcadorSVG(k, 15, 6, 4, `var(--s${k + 1})`)}</svg>${esc(id)} – ${esc(nomeIndice(R.by[id]))}</span>`).join('');
+  return `<div class="graf-box">${h}<div class="graf-leg">${leg}</div>${unidade ? '' : ''}</div>`;
+}
+
+// ---------- aba Trabalho: o mesmo texto do relatório, navegável por capítulos ----------
+let trabSeq = 0;
+const negritoHTML = t => esc(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+function kpisTrabalho() {
+  const per = state.caso.periodos, u = per.length - 1;
+  const v = (expr, k) => TX.avaliar(expr, k, state.caso, R);
+  const varp = expr => { const a = v(expr, 0), b = v(expr, u); return a && b != null && u > 0 ? `${b >= a ? '+' : '−'}${fmtN(Math.abs(b / a - 1) * 100, 1)}% desde ${per[0]}` : ''; };
+  const ind = id => R.by[id] && R.by[id].fmt[u] != null ? R.by[id].fmt[u] + (R.by[id].unid === 'd' ? ' dias' : '') : '–';
+  const cards = [
+    ['Receita líquida ' + per[u], TX.rs(v('DRE.RL', u), state.caso).replace(/^R\$ /, 'R$ '), varp('DRE.RL')],
+    ['Lucro líquido ' + per[u], TX.rs(v('DRE.LL', u), state.caso), varp('DRE.LL')],
+    ['Liquidez corrente', ind('LC'), R.by.LC && R.by.LC.t ? `${R.by.LC.delta} no período` : ''],
+    ['Rentabilidade do PL', ind('RPL'), R.by.RPL && R.by.RPL.t ? `${R.by.RPL.delta} no período` : ''],
+    ['Ciclo financeiro', ind('CF'), R.by.CF && R.by.CF.t ? `${R.by.CF.delta} no período` : '']
+  ];
+  const curto = t => String(t).replace(/ bilhões| bilhão/, ' bi').replace(/ milhões| milhão/, ' mi');
+  return `<div class="kpis">${cards.map(([l, val, d]) => [l, curto(val), d]).map(([l, val, d]) => `<div class="kpi"><span class="l">${esc(l)}</span><span class="v">${esc(val)}</span>${d ? `<span class="d">${esc(d)}</span>` : ''}</div>`).join('')}</div>`;
+}
+async function renderTrabalho() {
+  const el = $('#p-trab'); if (!el) return;
+  const seq = ++trabSeq;
+  if (!window.Relatorio || !R) { el.innerHTML = '<p class="nota">Carregando…</p>'; return; }
+  const api = { state, R, TRABALHO, trabalhoPronto, estiloTrabalho, preencher, textoIndice, nomeIndice, fichaEmpresa, fmtR, dadosDemo: () => null, carregarScript, nomeEstilo: nomeEstilo() };
+  let M; try { M = await window.Relatorio.montar(api, { web: true }); } catch (e) { console.error(e); el.innerHTML = '<p class="nota">Não foi possível montar o texto do trabalho.</p>'; return; }
+  if (seq !== trabSeq) return;
+  window.Relatorio.numerar(M.B);
+  const T = trabalhoPronto() ? TRABALHO : null;
+  let h = `<div class="trab-topo">`;
+  if (T) h += `<p class="equipe"><b>${esc(T.capa.instituicao)}</b> · ${esc(T.capa.disciplina)} · ${esc(T.capa.professora)}<br>${T.capa.alunos.map(a => esc(a[0])).join(' · ')}</p>`;
+  h += kpisTrabalho();
+  h += `<div class="trab-acoes">${PODE_EXPORTAR ? `<button class="btn primario" type="button" data-rel="pdf">Baixar relatório em PDF</button><button class="btn" type="button" data-rel="docx">Baixar em Word</button>` : ''}${seletorEstilo()}</div></div>`;
+  // capítulos
+  const caps = []; let cap = null, sub = null;
+  const novoCap = (id, num, titulo) => { cap = { id, num, titulo, corpo: '', subs: [] }; sub = null; caps.push(cap); };
+  const add = html => { if (sub) sub.corpo += html; else if (cap) cap.corpo += html; };
+  if (M.resumo) { novoCap('cap-resumo', '', 'Resumo'); add(`<p>${esc(M.resumo)}</p><p><strong>Palavras-chave:</strong> ${esc(M.palavras.join('. '))}.</p>`); }
+  let lista = null;
+  const fechaLista = () => { if (lista) { add(`<ul>${lista}</ul>`); lista = null; } };
+  for (const b of M.B) {
+    if (b.t !== 'li') fechaLista();
+    if (b.t === 'h1') novoCap('cap-' + b.num, b.num, b.texto);
+    else if (b.t === 'h2') { sub = { id: 'sec-' + b.num.replace('.', '-'), num: b.num, titulo: b.texto, corpo: '' }; cap.subs.push(sub); }
+    else if (b.t === 'h3') add(`<h4 id="ind-t-${b.num.replace(/\./g, '-')}">${esc(b.num)} ${esc(b.texto)}</h4>`);
+    else if (b.t === 'p') add(`<p>${esc(b.texto)}</p>`);
+    else if (b.t === 'li') lista = (lista || '') + `<li>${esc(b.texto)}</li>`;
+    else if (b.t === 'tabela') add(`<figure class="abnt"><figcaption>Tabela ${b.n} – ${esc(b.titulo)}</figcaption><div class="rolagem"><table><thead><tr>${b.cab.map((c, k) => `<th${b.dir.includes(k) ? ' class="n"' : ''}>${esc(c)}</th>`).join('')}</tr></thead><tbody>${b.linhas.map((l, r) => `<tr${b.negrito.includes(r) ? ' class="g"' : ''}>${l.map((c, k) => `<td${b.dir.includes(k) ? ' class="n"' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="fonte">${esc(b.fonte)}</p></figure>`);
+    else if (b.t === 'grafico') add(`<figure class="abnt"><figcaption>Gráfico ${b.n} – ${esc(b.titulo)}</figcaption>${graficoSVG(b.grupo)}<p class="fonte">${esc(b.fonte)}</p></figure>`);
+    else if (b.t === 'refs') { novoCap('cap-refs', '', 'Referências'); add(`<div class="refs">${b.itens.map(r => `<p>${negritoHTML(r)}</p>`).join('')}</div>`); }
+  }
+  fechaLista();
+  const abertos = new Set(state.trabAbertos || ['cap-resumo']);
+  const idx = caps.map(c => `<li><a href="#${c.id}" data-abrir="${c.id}">${c.num ? `<span class="n">${esc(c.num)}</span>` : ''}${esc(c.titulo)}</a>${c.subs.length ? `<ol>${c.subs.map(s2 => `<li><a href="#${s2.id}" data-abrir="${s2.id}"><span class="n">${esc(s2.num)}</span>${esc(s2.titulo)}</a></li>`).join('')}</ol>` : ''}</li>`).join('');
+  const corpo = caps.map(c => `<details id="${c.id}"${abertos.has(c.id) ? ' open' : ''}><summary>${c.num ? `<span class="n">${esc(c.num)}</span>` : ''}${esc(c.titulo)}</summary><div class="doc-body">${c.corpo}${c.subs.map(s2 => `<details id="${s2.id}"${abertos.has(s2.id) ? ' open' : ''}><summary><span class="n">${esc(s2.num)}</span>${esc(s2.titulo)}</summary><div class="doc-body">${s2.corpo}</div></details>`).join('')}</div></details>`).join('');
+  h += `<div class="doc-layout"><nav class="doc-index" aria-label="Sumário do trabalho"><span class="lbl">Sumário</span><ol>${idx}</ol><div class="doc-botoes"><button class="btn mini" type="button" data-doc="abrir">Abrir tudo</button><button class="btn mini" type="button" data-doc="fechar">Fechar tudo</button></div></nav><div class="doc">${corpo}</div></div>`;
+  el.innerHTML = h;
+}
+// abrir/fechar capítulos, lembrando o que ficou aberto
+function guardarAbertos() { state.trabAbertos = [...document.querySelectorAll('#p-trab details[open]')].map(d => d.id); salvar(); }
+document.addEventListener('toggle', e => { if (e.target.closest && e.target.closest('#p-trab')) guardarAbertos(); }, true);
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-doc]');
+  if (b) { const abrir = b.dataset.doc === 'abrir'; document.querySelectorAll('#p-trab details').forEach(d => { d.open = abrir; }); guardarAbertos(); return; }
+  const a = e.target.closest('[data-abrir]');
+  if (a) { const d = document.getElementById(a.dataset.abrir); if (d) { d.open = true; let p = d.parentElement && d.parentElement.closest('details'); while (p) { p.open = true; p = p.parentElement && p.parentElement.closest('details'); } } return; }
+  const r = e.target.closest('[data-rel]'); if (r) { gerarRelatorio(r.dataset.rel); return; }
+  const ir = e.target.closest('[data-ir]'); if (ir) { e.preventDefault(); irAba(ir.dataset.ir); window.scrollTo(0, 0); }
+});
+window.addEventListener('beforeprint', () => { if (state.aba === 'trab') document.querySelectorAll('#p-trab details').forEach(d => { d.open = true; }); });
+
 function renderAnalise() {
   const el = $('#p-analise'); const per = state.caso.periodos;
   let h = '';
@@ -731,7 +850,7 @@ function renderAnalise() {
   h += `<div class="barra-acoes"><button class="btn primario" type="button" data-copiar="tudo">Copiar análise completa</button><span class="nota">${state.estilo === 'auto' ? 'Estilo do grupo gerado automaticamente, para validação. ' : ''}Os números vêm dos cálculos do site; revise antes de entregar. Os valores <span class="sublinhado">sublinhados</span> mostram a fórmula e o cálculo.</span></div>`;
   h += `<div class="copia-fallback" id="copia-fallback" hidden><label for="ta-fallback" class="nota">A cópia automática foi bloqueada. Selecione e copie:</label><textarea id="ta-fallback" readonly></textarea></div>`;
   if (state.caso.fonte) h += `<p class="nota">Fonte: ${esc(state.caso.fonte)}</p>`;
-  if (trabalhoPronto()) h += htmlCaracterizacao();
+  if (FIXO) h += `<p class="nota">A caracterização da empresa, a interpretação e a conclusão estão na aba <a href="#" data-ir="trab">Trabalho</a>.</p>`;
   else if (R.abertura) {
     const ficha = fichaEmpresa();
     h += `<section class="abertura"><h2>Apresentação</h2>`;
@@ -748,6 +867,7 @@ function renderAnalise() {
     h += `<div class="rolagem"><table><thead><tr><th>Índice</th>${per.map(p => `<th class="n">${esc(p)}</th>`).join('')}<th>Evolução</th></tr></thead><tbody>`;
     for (const i of its) h += `<tr><td class="sigla"><a href="#ind-${i.id}">${i.id}</a></td>${i.fmt.map((v, k) => `<td class="n"><span${tip(tipIndice(i, k))}>${esc(v)}</span></td>`).join('')}<td>${chip(i)}</td></tr>`;
     h += `</tbody></table></div>`;
+    h += graficoSVG(g.id);
     for (const i of its) {
       h += `<article class="indice" id="ind-${i.id}"><div class="ind-cab"><span class="sigla">${i.id}</span><h3>${esc(nomeIndice(i))}</h3>${chip(i)}</div>`;
       h += `<div class="formula">${esc(i.formula)} · ${i.dir > 0 ? 'quanto maior, melhor' : 'quanto menor, melhor'}</div>`;
@@ -759,7 +879,7 @@ function renderAnalise() {
     }
     h += `</section>`;
   }
-  h += htmlFechamento();
+  if (!FIXO) h += htmlFechamento();
   el.innerHTML = h;
 }
 // quadro de conferência: contas e séries citadas no texto, com a variação no período
@@ -983,13 +1103,13 @@ $('#arq-importar').addEventListener('change', e => {
   rd.readAsText(f, 'utf-8');
 });
 // ---------- exportação da aba aberta (PDF, Word, CSV) ----------
-const NOME_ABA = { analise: 'Análise', mapa: 'Estruturas', demo: 'Demonstrações', estrutura: 'AV e AH', dados: 'Dados', params: 'Parâmetros' };
+const NOME_ABA = { trab: FIXO ? 'Trabalho' : 'Relatório', analise: 'Análise', mapa: 'Estruturas', demo: 'Demonstrações', estrutura: 'AV e AH', dados: 'Dados', params: 'Parâmetros' };
 const numCSV = v => v == null || v === '' ? '' : String(Math.round(Number(v) * 100) / 100).replace('.', ',');
 const linhaCSV = arr => arr.map(x => { const t = String(x == null ? '' : x); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(';');
 async function csvDaAba() {
   const per = state.caso.periodos, L = [];
   const aba = state.aba;
-  if (aba === 'analise') {
+  if (aba === 'analise' || aba === 'trab') {
     L.push(linhaCSV(['Grupo', 'Sigla', 'Índice', 'Fórmula', ...per, 'Evolução']));
     for (const g of R.grupos) for (const id of g.ids) { const i = R.by[id]; L.push(linhaCSV([g.titulo, i.id, nomeIndice(i), i.formula, ...i.vals.map(numCSV), i.t ? (i.t.est ? 'estável' : i.t.melhora ? 'melhora' : 'piora') : ''])); }
   } else if (aba === 'mapa') {
@@ -1026,7 +1146,7 @@ const PDF_LIBS = [
   'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
   'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'
 ];
-const TITULO_ABA = { analise: 'Análise das demonstrações contábeis', mapa: 'Estruturas: balanço, DRE e fluxo de caixa', demo: 'Demonstrações contábeis', estrutura: 'Análise vertical e horizontal', dados: 'Dados do caso', params: 'Parâmetros da análise' };
+const TITULO_ABA = { trab: 'Relatório de análise', analise: 'Análise das demonstrações contábeis', mapa: 'Estruturas: balanço, DRE e fluxo de caixa', demo: 'Demonstrações contábeis', estrutura: 'Análise vertical e horizontal', dados: 'Dados do caso', params: 'Parâmetros da análise' };
 const fmtCel = v => v == null ? '' : fmtN(v, Number.isInteger(v) ? 0 : 2);
 async function documentoDaAba() {
   const aba = state.aba, per = state.caso.periodos;
@@ -1196,10 +1316,12 @@ async function pdfDoDocumento(doc) {
   return pdf.output('blob');
 }
 $('#btn-word').addEventListener('click', async () => {
+  if (state.aba === 'trab') return gerarRelatorio('docx');
   const doc = await documentoDaAba();
   baixar(`${slug(NOME_ABA[state.aba])}-${slug(state.caso.empresa)}.doc`, '﻿' + wordDoDocumento(doc), 'application/msword');
 });
 $('#btn-pdf').addEventListener('click', async () => {
+  if (state.aba === 'trab') return gerarRelatorio('pdf');
   const b = $('#btn-pdf'); const rot = b.textContent;
   b.disabled = true; b.textContent = 'Gerando PDF…'; esconderDica();
   try {
@@ -1307,7 +1429,7 @@ $('#p-params').addEventListener('click', e => {
 function irAba(nome) {
   state.aba = nome;
   esconderDica();
-  for (const a of ['analise', 'mapa', 'demo', 'estrutura', 'dados', 'params']) {
+  for (const a of ABAS) {
     $('#t-' + a).setAttribute('aria-selected', String(a === nome));
     $('#p-' + a).hidden = a !== nome;
   }
@@ -1335,6 +1457,7 @@ document.addEventListener('click', e => {
 function aplicarModo() {
   document.documentElement.dataset.modo = FIXO ? 'trabalho' : 'livre';
   if (FIXO) for (const id of ['#btn-trocar', '#btn-json', '#menu-mais']) { const el = $(id); if (el) el.hidden = true; }
+  if (!FIXO) $('#t-trab').textContent = 'Relatório';
   // o relatório é gerado no navegador com bibliotecas externas: só onde a exportação funciona
   for (const id of ['#btn-rel-pdf', '#btn-rel-word', '#sep-rel']) { const el = $(id); if (el) el.hidden = !PODE_EXPORTAR; }
   if (PODE_EXPORTAR) { const rot = $('#sep-rel') && $('#sep-rel').nextElementSibling; if (rot) rot.hidden = false; } else { const rot = $('#sep-rel') && $('#sep-rel').nextElementSibling; if (rot) rot.hidden = true; }

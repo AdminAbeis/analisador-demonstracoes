@@ -13,6 +13,7 @@
 :root {
   --paper: #F2F4F1; --surface: #FFFFFF; --ink: #17201C; --muted: #56645E; --rule: #D6DDD8; --rule-strong: #A9B5AE;
   --accent: #0D6656; --accent-soft: #DCEDE8; --accent-ink: #FFFFFF;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
   --good: #2B7537; --good-soft: #E0EFE2; --bad: #A93D29; --bad-soft: #F6E2DC; --flat: #66716B; --flat-soft: #E7EBE8;
   --warn-soft: #FBF1DC; --warn: #8A5A00;
   --lig1: #C2611A; --lig2: #2F6FC4; --lig3: #2E8B4E; --tip-bg: #17201C; --tip-ink: #F2F4F1; --tip-muted: #B9C4BE; --tip-rule: #3A4741;
@@ -24,12 +25,14 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --paper: #101513; --surface: #171E1B; --ink: #E2E9E5; --muted: #95A39C; --rule: #28322E; --rule-strong: #43514A;
   --accent: #5BBEA8; --accent-soft: #1B3430; --accent-ink: #0B1210;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
   --good: #73C482; --good-soft: #1A2F1F; --bad: #E58870; --bad-soft: #38211C; --flat: #9BA6A0; --flat-soft: #242C29;
   --warn-soft: #33290F; --warn: #E2B45A; --lig1: #F0954F; --lig2: #79A9F2; --lig3: #6CC48C; --tip-bg: #E2E9E5; --tip-ink: #101513; --tip-muted: #4E5C55; --tip-rule: #BFCAC4; color-scheme: dark;
 } }
 :root[data-theme="dark"] {
   --paper: #101513; --surface: #171E1B; --ink: #E2E9E5; --muted: #95A39C; --rule: #28322E; --rule-strong: #43514A;
   --accent: #5BBEA8; --accent-soft: #1B3430; --accent-ink: #0B1210;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
   --good: #73C482; --good-soft: #1A2F1F; --bad: #E58870; --bad-soft: #38211C; --flat: #9BA6A0; --flat-soft: #242C29;
   --warn-soft: #33290F; --warn: #E2B45A; --lig1: #F0954F; --lig2: #79A9F2; --lig3: #6CC48C; --tip-bg: #E2E9E5; --tip-ink: #101513; --tip-muted: #4E5C55; --tip-rule: #BFCAC4; color-scheme: dark;
 }
@@ -230,7 +233,71 @@ footer.rodape a { color: var(--accent); }
 html[data-modo="trabalho"] .painel input[readonly] { background: var(--paper); border-color: var(--rule); cursor: default; }
 html[data-modo="trabalho"] .painel select:disabled { opacity: 1; color: var(--ink); background: var(--paper); border-color: var(--rule); }
 
+/* aba Trabalho: texto navegável por capítulos */
+.trab-topo { display: grid; gap: 14px; }
+.equipe { font-size: 13.5px; color: var(--muted); }
+.equipe b { color: var(--ink); font-weight: 600; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kpi { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; display: grid; gap: 2px; min-width: 0; }
+.kpi .v { font-family: var(--f-display); font-size: 26px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 12.5px; color: var(--muted); }
+.kpi .d { font-size: 12.5px; color: var(--muted); }
+.trab-acoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.doc-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 6px; }
+.doc-index { position: sticky; top: 64px; max-height: calc(100vh - 80px); overflow-y: auto; display: grid; gap: 10px; }
+.doc-index .lbl { font-family: var(--f-num); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.doc-index ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.doc-index ol ol { padding-left: 14px; }
+.doc-index a { display: block; text-decoration: none; color: var(--muted); font-size: 13.5px; padding: 4px 8px; border-radius: 5px; line-height: 1.35; }
+.doc-index a:hover, .doc-index a:focus-visible { background: var(--accent-soft); color: var(--ink); outline: none; }
+.doc-index .n { font-family: var(--f-num); font-size: 11.5px; color: var(--accent); margin-right: 6px; }
+.doc-botoes { display: flex; gap: 6px; flex-wrap: wrap; }
+.doc { display: grid; gap: 10px; min-width: 0; }
+.doc details { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; min-width: 0; scroll-margin-top: 64px; }
+.doc details details { background: var(--paper); border-radius: 8px; margin-top: 12px; }
+.doc summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 10px; padding: 14px 18px; font-family: var(--f-display); font-weight: 700; font-size: 18px; }
+.doc details details > summary { font-size: 15.5px; padding: 11px 14px; }
+.doc summary::-webkit-details-marker { display: none; }
+.doc summary .n { font-family: var(--f-num); font-size: 13px; color: var(--accent); min-width: 2.2em; }
+.doc summary::after { content: "+"; margin-left: auto; font-family: var(--f-num); color: var(--accent); font-size: 18px; line-height: 1; }
+.doc details[open] > summary::after { content: "−"; }
+.doc summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 10px; }
+.doc-body { padding: 2px 22px 20px; border-top: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.doc-body > *, .doc details, figure.abnt, figure.abnt .rolagem { min-width: 0; max-width: 100%; }
+.doc details details .doc-body { padding: 2px 16px 16px; }
+.doc-body p { margin: 0; max-width: 78ch; text-align: justify; hyphens: auto; line-height: 1.6; }
+.doc-body h4 { margin: 10px 0 -4px; font-size: 15px; }
+.doc-body ul { margin: 0; padding-left: 22px; display: grid; gap: 6px; max-width: 76ch; }
+.doc-body .refs p { text-align: left; overflow-wrap: anywhere; hyphens: none; }
+figure.abnt { margin: 6px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
+figure.abnt figcaption { font-size: 13px; color: var(--ink); }
+figure.abnt .fonte { font-size: 12.5px; color: var(--muted); }
+figure.abnt table th, figure.abnt table td { font-size: 13px; }
+@media (max-width: 860px) {
+  .doc-layout { grid-template-columns: minmax(0, 1fr); }
+  .doc-index { position: static; max-height: none; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px; }
+  .doc-index > ol { max-height: 260px; overflow-y: auto; }
+  .doc-body { padding: 2px 14px 16px; }
+  .doc details details .doc-body { padding: 2px 10px 12px; }
+}
+/* gráficos dos grupos */
+.graf-box { display: grid; gap: 6px; min-width: 0; }
+.graf { width: 100%; max-width: 680px; height: auto; display: block; }
+.graf .grade { stroke: var(--rule); stroke-width: 1; }
+.graf .zero { stroke: var(--rule-strong); }
+.graf text { font-family: var(--f-num); font-size: 13px; fill: var(--muted); }
+.graf text.rot { fill: var(--ink); font-size: 13.5px; }
+.graf .ponto { cursor: pointer; }
+.graf .ponto:focus { outline: none; }
+.graf .ponto:focus-visible .alvo { stroke: var(--accent); stroke-width: 2; }
+.graf-leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); }
+.graf-leg span { display: inline-flex; align-items: center; gap: 6px; }
+
 /* seletor do texto da análise */
+.seletor-texto { display: grid; gap: 4px; }
+.seletor-texto label { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13.5px; color: var(--muted); }
+.seletor-texto select { font: inherit; font-size: 14px; padding: 6px 10px; border: 1px solid var(--rule-strong); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 100%; }
+.seletor-texto .nota { max-width: 80ch; }
 .estilos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .estilos-rot { font-size: 13.5px; color: var(--muted); margin-right: 4px; }
 .estilo { position: relative; }
@@ -272,7 +339,8 @@ details.conferir td.fonte { font-family: var(--f-num); font-size: 11.5px; color:
 @page largo { size: A4 landscape; margin: 10mm; }
 @media print {
   :root, :root:not([data-theme="light"]), :root[data-theme="dark"] { --paper: #F2F4F1; --surface: #FFFFFF; --ink: #17201C; --muted: #56645E; --rule: #D6DDD8; --rule-strong: #A9B5AE; --accent: #0D6656; --accent-soft: #DCEDE8; --accent-ink: #FFFFFF; --good: #2B7537; --good-soft: #E0EFE2; --bad: #A93D29; --bad-soft: #F6E2DC; --flat: #66716B; --flat-soft: #E7EBE8; --warn-soft: #FBF1DC; --warn: #8A5A00; --lig1: #C2611A; --lig2: #2F6FC4; --lig3: #2E8B4E; --tip-bg: #17201C; --tip-ink: #F2F4F1; --tip-muted: #B9C4BE; --tip-rule: #3A4741; color-scheme: light; }
-  nav.abas, #painel-busca, .cab-acoes, .periodos, .barra-acoes, .ind-acoes, .toast, .dica, footer.rodape, .copia-fallback, .seletor, .estilos, .incluir-ev, details.conferir { display: none !important; }
+  nav.abas, #painel-busca, .cab-acoes, .periodos, .barra-acoes, .ind-acoes, .toast, .dica, footer.rodape, .copia-fallback, .seletor, .estilos, .seletor-texto, .trab-acoes, .doc-index, .incluir-ev, details.conferir { display: none !important; }
+  .doc-layout { display: block !important; } .doc details { border: 0 !important; } .doc summary::after { content: none !important; }
   .so-impressao { display: block; font-size: 10pt; color: #444; }
   span.so-impressao { display: inline; }
   body { background: #fff; color: #000; font-size: 10.5pt; }
@@ -347,6 +415,7 @@ details.conferir td.fonte { font-family: var(--f-num); font-size: 11.5px; color:
 
 <nav class="abas" aria-label="Seções">
   <div class="wrap" role="tablist">
+    <button class="aba" role="tab" id="t-trab" aria-controls="p-trab" aria-selected="false">Trabalho</button>
     <button class="aba" role="tab" id="t-analise" aria-controls="p-analise" aria-selected="true">Análise</button>
     <button class="aba" role="tab" id="t-mapa" aria-controls="p-mapa" aria-selected="false">Estruturas</button>
     <button class="aba" role="tab" id="t-demo" aria-controls="p-demo" aria-selected="false">Demonstrações</button>
@@ -357,6 +426,7 @@ details.conferir td.fonte { font-family: var(--f-num); font-size: 11.5px; color:
 </nav>
 
 <main class="wrap">
+  <section class="painel" id="p-trab" role="tabpanel" aria-labelledby="t-trab" hidden></section>
   <section class="painel" id="p-analise" role="tabpanel" aria-labelledby="t-analise"></section>
   <section class="painel" id="p-mapa" role="tabpanel" aria-labelledby="t-mapa" hidden></section>
   <section class="painel" id="p-demo" role="tabpanel" aria-labelledby="t-demo" hidden></section>
@@ -372,6 +442,7 @@ details.conferir td.fonte { font-family: var(--f-num); font-size: 11.5px; color:
 <script src="engine.js"></script>
 <script src="textos.js"></script>
 <script src="trabalho.js" data-trabalho></script>
+<script src="relatorio.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

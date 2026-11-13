@@ -24,6 +24,7 @@
   const TRACOS = [[], [18, 10], [6, 8], [24, 8, 6, 8], [2, 6]];
   const SERIES = { liq: ['LI', 'LC', 'LS', 'LG'], est: ['PCT', 'CE', 'IPL', 'IRNC'], rent: ['ML', 'RA', 'RPL'], ativ: ['PMRE', 'PMRV', 'PMPC', 'CO', 'CF'] };
   const UNID = { liq: 'índice', est: '%', rent: '%', ativ: 'dias' };
+  const tituloGrafico = (g, emp) => `Evolução dos ${(NOMES_GRUPO[g.id] || g.titulo).toLowerCase()} da ${emp}${g.id === 'rent' ? ' (exceto o giro do ativo, medido em vezes)' : ''}`;
   function graficoGrupo(g, R, per, emp) {
     if (typeof document === 'undefined' || per.length < 2) return null;
     const ids = (SERIES[g.id] || g.ids).filter(id => R.by[id] && R.by[id].vals.some(v => v != null));
@@ -81,8 +82,7 @@
       c.fillStyle = '#33332f'; c.textAlign = 'left'; c.textBaseline = 'middle';
       const curto = ids.length > 3 ? id : nome; c.fillText(curto, lx + 54, ly); lx += 54 + c.measureText(curto).width + 36;
     });
-    const titulo = `Evolução dos ${(NOMES_GRUPO[g.id] || g.titulo).toLowerCase()} da ${emp}${g.id === 'rent' ? ' (exceto o giro do ativo, medido em vezes)' : ''}`;
-    return { titulo, data: cv.toDataURL('image/png'), w: Wc, h: Hc };
+    return { titulo: tituloGrafico(g, emp), data: cv.toDataURL('image/png'), w: Wc, h: Hc };
   }
 
   function hoje() { const d = new Date(); return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`; }
@@ -91,7 +91,8 @@
   // ---------------------------------------------------------------- modelo
   // Blocos: {t:'h1'|'h2'|'h3', texto} | {t:'p', texto, semRecuo} | {t:'li', texto} | {t:'tabela', titulo, cab, linhas, fonte, dir, negrito, larg}
   //         {t:'grafico', titulo, fonte, png, w, h} | {t:'refs', itens} | {t:'apendice', texto}
-  async function montar(api) {
+  // web: true monta o mesmo texto para a aba Trabalho do site (gráficos interativos, sem apêndices)
+  async function montar(api, opcoes = {}) {
     const { state, R } = api;
     const caso = state.caso, per = caso.periodos.map(String);
     const T = api.trabalhoPronto() ? api.TRABALHO : null;
@@ -148,8 +149,8 @@
       tabela(`${NOMES_GRUPO[g.id] || g.titulo} da ${emp} (${faixa})`, ['Indicador', ...per, 'Variação'],
         its.map(i => [`${api.nomeIndice(i)} (${i.id})`, ...i.fmt.map(v => v == null ? '–' : v + (i.unid === 'd' ? ' dias' : '')), i.t ? (i.t.est ? 'estável' : `${i.delta} (${i.t.melhora ? 'melhora' : 'piora'})`) : '–']),
         { dir: per.map((_, k) => k + 1).concat(per.length + 1), larg: [0.36].concat(per.map(() => 0.42 / per.length), [0.22]) });
-      const png = graficoGrupo(g, R, per, emp);
-      if (png) grafico(png.titulo, png.data, png.w, png.h);
+      if (opcoes.web) { if (per.length > 1) { graficos.push(tituloGrafico(g, emp)); B.push({ t: 'grafico', titulo: tituloGrafico(g, emp), grupo: g.id, fonte: fonteCVM, n: graficos.length }); } }
+      else { const png = graficoGrupo(g, R, per, emp); if (png) grafico(png.titulo, png.data, png.w, png.h); }
       for (const i of its) { h3(`${api.nomeIndice(i)} (${i.id})`); p(api.textoIndice(i)); }
     }
 
@@ -181,7 +182,7 @@
     const apend = [['BPA', 'Balanço patrimonial – ativo'], ['BPP', 'Balanço patrimonial – passivo e patrimônio líquido'], ['DRE', 'Demonstração do resultado do exercício'], ['DFC', 'Demonstração dos fluxos de caixa']];
     const letras = 'ABCDEFG';
     let n = 0;
-    for (const [demo, nome] of apend) {
+    for (const [demo, nome] of (opcoes.web ? [] : apend)) {
       let d; try { d = await api.dadosDemo(demo); } catch (e) { d = null; }
       if (!d || !d.linhas || !d.linhas.length) continue;
       const lim = demo === 'DRE' ? 3 : 3;
@@ -561,7 +562,7 @@
   }
 
   window.Relatorio = {
-    montar,
+    montar, SERIES, CORES, NOMES_GRUPO, numerar,
     async gerar(api, formato) {
       const M = await montar(api);
       return formato === 'docx' ? docx(M, api) : pdf(M, api);

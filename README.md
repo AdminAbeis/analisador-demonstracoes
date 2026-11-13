@@ -106,19 +106,19 @@ O site tem duas páginas com o mesmo motor:
 
 | Página | Endereço | O que faz |
 |---|---|---|
-| Trabalho do grupo | `.../analisador-demonstracoes/` | Abre direto na WEG, 2023 a 2025. Não troca de empresa nem de anos; Dados e Parâmetros só para ver. Traz a caracterização da empresa, os textos do grupo e o relatório ABNT |
+| Trabalho do grupo | `.../analisador-demonstracoes/` | Abre direto na WEG, 2023 a 2025, na aba **Trabalho**: o texto completo do relatório, navegável por capítulos (sumário lateral, abrir e fechar cada capítulo, abrir tudo e fechar tudo), com indicadores-resumo, gráficos e os botões para baixar o relatório. Não troca de empresa nem de anos; Dados e Parâmetros só para ver |
 | Explorar | `.../analisador-demonstracoes/explorar.html` | Qualquer companhia da CVM, qualquer intervalo de anos, dados e parâmetros editáveis. Nenhum link da página do trabalho leva até ela |
 
 A página explorar é gerada pelo workflow a partir do `index.html`, sem a linha que carrega o `trabalho.js`.
 
-**Texto da análise.** Na aba Análise, um seletor troca o texto de cada índice:
+**Versão do texto.** Nas abas Trabalho e Análise, o campo **Versão do texto** troca o texto de cada índice (a escolha vale para o site e para o relatório baixado):
 
 | Opção | Onde aparece | O que é |
 |---|---|---|
-| Combinado | Trabalho | O jeito de escrever do grupo com os números e os cruzamentos do sistema (padrão) |
-| Texto do grupo | Trabalho | Os textos escritos pelo grupo, corrigidos onde os números não confirmavam a explicação; índices sem texto do grupo usam o do sistema |
-| Sistema | As duas | O texto gerado pelas regras do motor |
-| Estilo do grupo (automático) | As duas | Gerador que escreve no estilo do grupo para qualquer empresa, para validação |
+| Versão final do trabalho | Trabalho | O jeito de escrever do grupo com os números e os cruzamentos do sistema (padrão) |
+| Texto original do grupo (corrigido) | Trabalho | Os textos escritos pelo grupo, corrigidos onde os números não confirmavam a explicação; índices sem texto do grupo usam o do sistema |
+| Texto do sistema | As duas | O texto gerado pelas regras do motor |
+| Estilo do grupo, automático (em teste) | As duas | Gerador que escreve no estilo do grupo para qualquer empresa, para validação |
 
 Os textos escritos à mão ficam em `trabalho.js` e usam marcadores como `{{v:LC}}` ou `{{rs:AC.EST@2025}}`, preenchidos com os números calculados pelo site (`textos.js`). Assim o texto nunca diverge da tabela. O teste `tests/textos.test.js` falha se algum marcador ficar sem valor.
 
