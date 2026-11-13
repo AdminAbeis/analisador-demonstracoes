@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Comparação dos Textos</title>
+<meta name="description" content="As quatro versões do texto de cada índice da análise da WEG S.A., lado a lado, para o grupo comparar.">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: ferramenta de comparação. Barra fixa com os 17 índices; cabeçalho do índice; cartões das versões em grade 2×2 ou lado a lado. */
+:root {
+  --paper: #F2F4F1; --surface: #FFFFFF; --ink: #17201C; --muted: #56645E; --rule: #D6DDD8; --rule-strong: #A9B5AE;
+  --accent: #0D6656; --accent-soft: #DCEDE8; --accent-ink: #FFFFFF;
+  --v1: #0D6656; --v2: #2a78d6; --v3: #66716B; --v4: #c25a1c;
+  --mark: #FBE7A8; --good: #2B7537; --good-soft: #E0EFE2; --bad: #A93D29; --bad-soft: #F6E2DC; --flat: #66716B; --flat-soft: #E7EBE8; --warn-soft: #FBF1DC; --warn: #8A5A00;
+  --f-display: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
+  --f-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-num: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #101513; --surface: #171E1B; --ink: #E2E9E5; --muted: #95A39C; --rule: #28322E; --rule-strong: #43514A;
+  --accent: #5BBEA8; --accent-soft: #1B3430; --accent-ink: #0B1210;
+  --v1: #5BBEA8; --v2: #6ea6ee; --v3: #9BA6A0; --v4: #f0955a;
+  --mark: #4a3d12; --good: #73C482; --good-soft: #1A2F1F; --bad: #E58870; --bad-soft: #38211C; --flat: #9BA6A0; --flat-soft: #242C29; --warn-soft: #33290F; --warn: #E2B45A;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --paper: #101513; --surface: #171E1B; --ink: #E2E9E5; --muted: #95A39C; --rule: #28322E; --rule-strong: #43514A;
+  --accent: #5BBEA8; --accent-soft: #1B3430; --accent-ink: #0B1210;
+  --v1: #5BBEA8; --v2: #6ea6ee; --v3: #9BA6A0; --v4: #f0955a;
+  --mark: #4a3d12; --good: #73C482; --good-soft: #1A2F1F; --bad: #E58870; --bad-soft: #38211C; --flat: #9BA6A0; --flat-soft: #242C29; --warn-soft: #33290F; --warn: #E2B45A;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { padding-top: env(safe-area-inset-top, 0px); }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 16px; }
+a { color: var(--accent); }
+header.topo { padding-block: 18px 10px; display: grid; gap: 6px; }
+.eyebrow { font-family: var(--f-num); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--f-display); font-size: clamp(24px, 4.5vw, 34px); line-height: 1.1; margin: 0; }
+.sub { color: var(--muted); font-size: 14px; margin: 0; max-width: 90ch; }
+
+/* barra dos índices */
+nav.indices { position: sticky; top: 0; z-index: 5; background: var(--paper); border-bottom: 1px solid var(--rule); }
+nav.indices .wrap { display: flex; gap: 10px; align-items: center; padding-block: 8px; }
+.setas { display: flex; gap: 4px; flex: none; }
+.btn { font: inherit; font-size: 13.5px; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 6px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grupos { display: flex; gap: 14px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; min-width: 0; }
+.grupo { display: flex; gap: 4px; align-items: center; flex: none; }
+.grupo .rot { font-family: var(--f-num); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
+.chip { font-family: var(--f-num); font-size: 13px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.chip[aria-current="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* cabeçalho do índice */
+.indice { padding-block: 18px 6px; display: grid; gap: 10px; }
+.indice-cab { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+.sigla { font-family: var(--f-num); font-size: 13px; background: var(--accent); color: var(--accent-ink); padding: 2px 8px; border-radius: 4px; }
+.indice h2 { font-family: var(--f-display); font-size: 24px; margin: 0; }
+.formula { font-family: var(--f-num); font-size: 13px; color: var(--muted); }
+.valores { display: flex; flex-wrap: wrap; gap: 8px; }
+.valor { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 6px 12px; display: grid; }
+.valor .a { font-size: 11.5px; color: var(--muted); font-family: var(--f-num); }
+.valor .v { font-family: var(--f-num); font-size: 17px; font-variant-numeric: tabular-nums; }
+.tend { font-size: 12.5px; padding: 2px 8px; border-radius: 999px; font-family: var(--f-num); }
+.tend.bom { background: var(--good-soft); color: var(--good); } .tend.ruim { background: var(--bad-soft); color: var(--bad); } .tend.neutro { background: var(--flat-soft); color: var(--flat); }
+
+/* controles */
+.controles { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 13.5px; color: var(--muted); padding-block: 4px 12px; }
+.controles fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.controles legend { float: left; margin-right: 8px; }
+.controles label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; color: var(--ink); }
+.controles input { accent-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; border: 0; background: var(--surface); color: var(--ink); padding: 5px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* cartões */
+.cartoes { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-bottom: 40px; }
+.cartoes.lado { grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); }
+@media (max-width: 1100px) { .cartoes.lado { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .cartoes, .cartoes.lado { grid-template-columns: minmax(0, 1fr); } .arrumacao { display: none !important; } }
+.cartao { background: var(--surface); border: 1px solid var(--rule); border-top: 4px solid var(--cor); border-radius: 10px; padding: 14px 16px 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.cartao h3 { margin: 0; font-family: var(--f-display); font-size: 18px; display: flex; gap: 8px; align-items: baseline; }
+.cartao h3 .n { font-family: var(--f-num); font-size: 12px; color: var(--cor); }
+.cartao .desc { font-size: 13px; color: var(--muted); margin: 0; }
+.metricas { display: flex; flex-wrap: wrap; gap: 6px; }
+.metricas span { font-family: var(--f-num); font-size: 11.5px; color: var(--muted); background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 6px; }
+.aviso { font-size: 12.5px; background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 6px 10px; }
+.texto { margin: 0; font-size: 15px; line-height: 1.65; text-align: justify; hyphens: auto; }
+.texto mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2px; }
+.cartao .acoes { display: flex; justify-content: flex-end; }
+.estado { padding: 40px 0; color: var(--muted); }
+footer { color: var(--muted); font-size: 12.5px; padding-block: 0 30px; }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 8px 14px; border-radius: 8px; font-size: 13.5px; z-index: 20; }
+@media print {
+  nav.indices, .controles, .acoes, .toast { display: none !important; }
+  .cartoes { grid-template-columns: 1fr 1fr !important; }
+  .cartao { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="topo wrap">
+  <div class="eyebrow">Analisador de demonstrações · comparação dos textos</div>
+  <h1>As quatro versões do texto, índice por índice</h1>
+  <p class="sub" id="sub">Carregando os dados da WEG…</p>
+</header>
+<nav class="indices" aria-label="Índices">
+  <div class="wrap">
+    <div class="setas">
+      <button class="btn" type="button" id="ant" aria-label="Índice anterior" title="Índice anterior (←)">←</button>
+      <button class="btn" type="button" id="prox" aria-label="Próximo índice" title="Próximo índice (→)">→</button>
+    </div>
+    <div class="grupos" id="grupos"></div>
+  </div>
+</nav>
+<main class="wrap">
+  <section class="indice" id="indice" aria-live="polite"></section>
+  <div class="controles">
+    <fieldset id="versoes"><legend>Mostrar:</legend></fieldset>
+    <label><input type="checkbox" id="marcar" checked> Destacar números</label>
+    <span class="arrumacao">Arrumação: <span class="seg" role="group" aria-label="Arrumação dos cartões"><button type="button" data-layout="grade" aria-pressed="true">2 × 2</button><button type="button" data-layout="lado" aria-pressed="false">Lado a lado</button></span></span>
+  </div>
+  <div class="cartoes" id="cartoes"><p class="estado">Carregando…</p></div>
+</main>
+<footer class="wrap">Os textos usam os mesmos dados e as mesmas regras do site do trabalho. Use ← e → no teclado para trocar de índice.</footer>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="engine.js"></script>
+<script src="textos.js"></script>
+<script src="trabalho.js"></script>
+<script>
+(() => {
+  'use strict';
+  const E = window.Engine, TX = window.Textos, TR = window.TRABALHO;
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const VERSOES = [
+    { k: 'combinado', nome: 'Versão final do trabalho', cor: 'var(--v1)', desc: 'Jeito de escrever do grupo com os números e os cruzamentos do sistema. É a versão do relatório.' },
+    { k: 'grupo', nome: 'Texto original do grupo (corrigido)', cor: 'var(--v2)', desc: 'O que o grupo escreveu, com os erros de número corrigidos.' },
+    { k: 'sistema', nome: 'Texto do sistema', cor: 'var(--v3)', desc: 'Gerado pelas regras do sistema, sem ajustes manuais.' },
+    { k: 'auto', nome: 'Estilo do grupo, automático', cor: 'var(--v4)', desc: 'Gerador que imita o estilo do grupo, para qualquer empresa (em teste).' }
+  ];
+  const CHAVE = 'analisador-comparacao';
+  let pref = { mostrar: VERSOES.map(v => v.k), marcar: true, layout: 'grade' };
+  try { pref = { ...pref, ...JSON.parse(localStorage.getItem(CHAVE) || '{}') }; } catch (e) { }
+  const guardar = () => { try { localStorage.setItem(CHAVE, JSON.stringify(pref)); } catch (e) { } };
+  let caso, R, ordem = [], atual = null;
+
+  function toast(t) { const el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => { el.hidden = true; }, 2200); }
+  const palavras = t => (t.match(/\S+/g) || []).length;
+  const ano = m => /^(19|20)\d\d$/.test(m);
+  const numeros = t => (t.match(/(R\$\s?)?[−+-]?\d[\d.]*(,\d+)?(%| p\.p\.| dias| vezes| bilhões| bilhão| milhões| milhão)?/g) || []).filter(m => !ano(m)).length;
+  const destacar = t => esc(t).replace(/(R\$\s?)?[−+-]?\d[\d.]*(,\d+)?(%| p\.p\.| dias| vezes| bilh(?:ões|ão)| milh(?:ões|ão))?/g, m => ano(m) ? m : `<mark>${m}</mark>`);
+
+  function textos(i) {
+    const P = t => TX.preencher(t, caso, R);
+    return {
+      combinado: { t: TR.combinado[i.id] ? P(TR.combinado[i.id]) : i.texto },
+      grupo: TR.grupo[i.id] ? { t: P(TR.grupo[i.id]) } : { t: i.texto, aviso: 'O grupo não escreveu texto para este índice. Esta versão usa o texto do sistema (igual ao cartão "Texto do sistema").' },
+      sistema: { t: i.texto },
+      auto: { t: TX.estiloGrupo(i, R, caso) }
+    };
+  }
+  function montarBarra() {
+    $('#grupos').innerHTML = R.grupos.map(g => `<div class="grupo" role="group" aria-label="${esc(g.titulo)}"><span class="rot">${esc(g.titulo)}</span>${g.ids.map(id => `<button class="chip" type="button" data-id="${id}" title="${esc(R.by[id].nome.replace(/^(o|a) /, ''))}">${id}</button>`).join('')}</div>`).join('');
+    $('#versoes').insertAdjacentHTML('beforeend', VERSOES.map(v => `<label><input type="checkbox" value="${v.k}"${pref.mostrar.includes(v.k) ? ' checked' : ''}> <span style="color:${v.cor}">■</span> ${esc(v.nome)}</label>`).join(''));
+    document.querySelectorAll('[data-layout]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.layout === pref.layout)));
+    $('#marcar').checked = pref.marcar;
+  }
+  function mostrar(id, rolar) {
+    const i = R.by[id]; if (!i) return;
+    atual = id;
+    document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-current', String(c.dataset.id === id)));
+    const chip = document.querySelector(`.chip[data-id="${id}"]`); if (chip && rolar !== false) chip.scrollIntoView({ block: 'nearest', inline: 'center' });
+    history.replaceState(null, '', '#' + id);
+    const per = caso.periodos, nome = i.nome.replace(/^(o|a) /, '');
+    const t = i.t || {};
+    const tend = !i.t ? '' : t.est ? '<span class="tend neutro">estável</span>' : `<span class="tend ${t.melhora ? 'bom' : 'ruim'}">${esc(i.delta)} · ${t.melhora ? 'melhora' : 'piora'}</span>`;
+    $('#indice').innerHTML = `<div class="indice-cab"><span class="sigla">${i.id}</span><h2>${esc(nome[0].toUpperCase() + nome.slice(1))}</h2><span class="formula">${esc(i.formula)} · ${i.dir > 0 ? 'quanto maior, melhor' : 'quanto menor, melhor'}</span>${tend}</div>
+      <div class="valores">${per.map((p, k) => `<div class="valor"><span class="a">${esc(p)}</span><span class="v">${esc(i.fmt[k] == null ? '–' : i.fmt[k] + (i.unid === 'd' ? ' dias' : ''))}</span></div>`).join('')}</div>`;
+    const tx = textos(i);
+    const vis = VERSOES.filter(v => pref.mostrar.includes(v.k));
+    const el = $('#cartoes');
+    el.className = 'cartoes' + (pref.layout === 'lado' ? ' lado' : '');
+    el.style.setProperty('--n', Math.max(1, vis.length));
+    el.innerHTML = vis.length ? vis.map(v => {
+      const x = tx[v.k], n = VERSOES.indexOf(v) + 1;
+      return `<article class="cartao" style="--cor:${v.cor}"><h3><span class="n">${n}</span>${esc(v.nome)}</h3><p class="desc">${esc(v.desc)}</p>
+        <div class="metricas"><span>${palavras(x.t)} palavras</span><span>${numeros(x.t)} números citados</span></div>
+        ${x.aviso ? `<div class="aviso">${esc(x.aviso)}</div>` : ''}
+        <p class="texto">${pref.marcar ? destacar(x.t) : esc(x.t)}</p>
+        <div class="acoes"><button class="btn" type="button" data-copiar="${v.k}">Copiar texto</button></div></article>`;
+    }).join('') : '<p class="estado">Marque pelo menos uma versão em "Mostrar".</p>';
+  }
+  function passo(d) { const k = ordem.indexOf(atual); mostrar(ordem[(k + d + ordem.length) % ordem.length]); }
+
+  document.addEventListener('click', e => {
+    const c = e.target.closest('.chip'); if (c) { mostrar(c.dataset.id); return; }
+    const l = e.target.closest('[data-layout]'); if (l) { pref.layout = l.dataset.layout; guardar(); document.querySelectorAll('[data-layout]').forEach(b => b.setAttribute('aria-pressed', String(b === l))); mostrar(atual, false); return; }
+    const cp = e.target.closest('[data-copiar]');
+    if (cp) { const t = textos(R.by[atual])[cp.dataset.copiar].t; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Texto copiado'), () => toast('Não foi possível copiar')); }
+  });
+  $('#ant').addEventListener('click', () => passo(-1));
+  $('#prox').addEventListener('click', () => passo(1));
+  $('#versoes').addEventListener('change', () => { pref.mostrar = [...document.querySelectorAll('#versoes input:checked')].map(x => x.value); guardar(); mostrar(atual, false); });
+  $('#marcar').addEventListener('change', e => { pref.marcar = e.target.checked; guardar(); mostrar(atual, false); });
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, textarea, select') || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === 'ArrowRight') { passo(1); e.preventDefault(); } else if (e.key === 'ArrowLeft') { passo(-1); e.preventDefault(); }
+  });
+
+  fetch(`data/cia/${TR.empresa}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(doc => {
+    const i0 = doc.periodos.findIndex(p => p.rotulo === TR.de), i1 = doc.periodos.findIndex(p => p.rotulo === TR.ate);
+    caso = E.casoDaBase(doc, i0, i1);
+    R = E.analisar(caso, E.PADRAO);
+    ordem = R.grupos.flatMap(g => g.ids);
+    $('#sub').textContent = `${caso.empresa}, exercícios de ${caso.periodos.join(', ').replace(/, ([^,]*)$/, ' e $1')}, com os parâmetros padrão do trabalho. Escolha um índice na barra e compare as versões.`;
+    montarBarra();
+    const pedido = decodeURIComponent(location.hash.slice(1));
+    mostrar(ordem.includes(pedido) ? pedido : ordem[0]);
+  }).catch(() => {
+    $('#sub').textContent = 'Não foi possível carregar os dados da WEG.';
+    $('#cartoes').innerHTML = '<p class="estado">Os dados são gerados pela publicação no GitHub. Abra esta página pelo endereço do site (…github.io/analisador-demonstracoes/comparacao.html).</p>';
+  });
+})();
+</script>
+</body>
+</html>
