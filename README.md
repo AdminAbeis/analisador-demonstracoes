@@ -111,6 +111,8 @@ O site tem duas páginas com o mesmo motor:
 
 A página explorar é gerada pelo workflow a partir do `index.html`, sem a linha que carrega o `trabalho.js`.
 
+A página `comparacao.html` mostra as quatro versões do texto de cada índice lado a lado, para o grupo comparar. Também não tem link a partir da página do trabalho.
+
 **Versão do texto.** Nas abas Trabalho e Análise, o campo **Versão do texto** troca o texto de cada índice (a escolha vale para o site e para o relatório baixado):
 
 | Opção | Onde aparece | O que é |

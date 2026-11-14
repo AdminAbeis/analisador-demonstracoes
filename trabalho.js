@@ -17,6 +17,37 @@
 window.TRABALHO = {
   empresa: '5410', de: '2023', ate: '2025',
 
+  // Texto escolhido pelo grupo para cada índice na versão entregue:
+  // 'combinado' = versão final do trabalho; 'grupo' = texto original do grupo (corrigido),
+  // que usa o texto do sistema quando o grupo não escreveu aquele índice.
+  textoFinal: {
+    LI: 'combinado', LC: 'grupo', LS: 'combinado', LG: 'combinado',
+    PCT: 'combinado', CE: 'combinado', IPL: 'combinado', IRNC: 'combinado',
+    GA: 'grupo', ML: 'combinado', RA: 'combinado', RPL: 'combinado',
+    PMRE: 'grupo', PMRV: 'grupo', PMPC: 'grupo', CO: 'grupo', CF: 'grupo'
+  },
+
+  // Aba Empresa: resumo da caracterização (o texto completo fica no capítulo 2 do trabalho)
+  apresentacao: 'Fabricante brasileira de motores elétricos e equipamentos para geração, transmissão e distribuição de energia, fundada em 1961 em Jaraguá do Sul (SC) e presente com fábricas em 18 países.',
+  destaques: [
+    ['{{rs:DRE.RL@2025}}', 'de receita líquida em 2025'],
+    ['60%', 'da receita de 2025 veio do exterior'],
+    ['18 países', 'com fábricas da WEG'],
+    ['49 mil', 'colaboradores em dezembro de 2025']
+  ],
+  fonteDestaques: 'Fontes: demonstrações financeiras da companhia (CVM, 2026) e WEG (2026a).',
+  marcos: [
+    ['1961', 'Fundação em Jaraguá do Sul por Werner Ricardo Voigt, Eggon João da Silva e Geraldo Werninghaus. O nome vem das iniciais dos três.'],
+    ['1968', 'Criação do CENTROWEG, para formar a mão de obra técnica da própria empresa.'],
+    ['1970', 'Início das exportações para a América Latina; em 1973, os motores já eram vendidos em 20 países.'],
+    ['1981–1988', 'Diversificação: acionamentos, transformadores, energia, química (tintas e vernizes) e automação.'],
+    ['2000', 'Primeiras fábricas no exterior, na Argentina e no México.'],
+    ['2005', 'Primeira fábrica na China.'],
+    ['2023', 'Anúncio da compra dos negócios de motores e geradores industriais da Regal Rexnord.'],
+    ['2024', 'Alberto Yoshikazu Kuba assume a presidência executiva.']
+  ],
+  fonteMarcos: 'Fonte: WEG (2026b).',
+
   capa: {
     instituicao: 'UNIVERSIDADE PARANAENSE – UNIPAR',
     cursos: 'CURSOS DE ADMINISTRAÇÃO E CIÊNCIAS CONTÁBEIS',

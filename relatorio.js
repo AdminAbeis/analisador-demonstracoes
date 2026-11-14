@@ -182,7 +182,7 @@
     const apend = [['BPA', 'Balanço patrimonial – ativo'], ['BPP', 'Balanço patrimonial – passivo e patrimônio líquido'], ['DRE', 'Demonstração do resultado do exercício'], ['DFC', 'Demonstração dos fluxos de caixa']];
     const letras = 'ABCDEFG';
     let n = 0;
-    for (const [demo, nome] of (opcoes.web ? [] : apend)) {
+    for (const [demo, nome] of apend) {
       let d; try { d = await api.dadosDemo(demo); } catch (e) { d = null; }
       if (!d || !d.linhas || !d.linhas.length) continue;
       const lim = demo === 'DRE' ? 3 : 3;

@@ -10,15 +10,12 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const TRABALHO = window.TRABALHO || null;
 const FIXO = !!TRABALHO;
 const TX = window.Textos;
-const CHAVE = FIXO ? 'analisador-dc-trabalho-v2' : 'analisador-dc-v3';
-const ABAS = ['trab', 'analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'];
+const CHAVE = FIXO ? 'analisador-dc-trabalho-v3' : 'analisador-dc-v3';
+const ABAS = FIXO ? ['trab', 'empresa', 'analise', 'mapa', 'demo', 'estrutura', 'equipe'] : ['trab', 'analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'];
 const E_SISTEMA = ['sistema', 'Texto do sistema', 'Texto gerado pelas regras do sistema, sem ajustes manuais.'];
 const E_AUTO = ['auto', 'Estilo do grupo, automático (em teste)', 'Gerador que escreve no estilo dos textos do grupo para qualquer empresa. Serve para o grupo validar.'];
-const ESTILOS = FIXO
-  ? [['combinado', 'Versão final do trabalho', 'Os textos do grupo reescritos com os números e os cruzamentos do sistema, para os 17 índices. É a versão do relatório entregue.'],
-     ['grupo', 'Texto original do grupo (corrigido)', 'Os textos que o grupo escreveu, com os erros de número corrigidos. Os índices que o grupo não escreveu usam o texto do sistema.'],
-     E_SISTEMA, E_AUTO]
-  : [E_SISTEMA, E_AUTO];
+// Na página do trabalho o texto de cada índice é o escolhido pelo grupo (TRABALHO.textoFinal); sem seletor.
+const ESTILOS = FIXO ? [['final', 'Texto do trabalho', 'Texto escolhido pelo grupo para cada índice.']] : [E_SISTEMA, E_AUTO];
 const CD_INICIAL = '5410'; // WEG: empresa aberta na primeira visita
 const BASE_URL = 'data/';
 // Fora do Claude (GitHub Pages, servidor local ou arquivo aberto no computador) os downloads funcionam.
@@ -115,7 +112,7 @@ async function carregarBase() {
     st.textContent = BASE.demo
       ? `Base de demonstração com ${n} companhia. A base completa, com todas as companhias abertas, é gerada pela atualização semanal no GitHub.`
       : `${n.toLocaleString('pt-BR')} companhias abertas com balanço e DRE na CVM (${faixaAnos()}), atualizado em ${data}.`;
-    $('#rodape').innerHTML = `Dados: <a href="https://dados.cvm.gov.br/dataset/cia_aberta-doc-dfp" target="_blank" rel="noopener">CVM, Portal de Dados Abertos</a> (licença ODbL). Os textos são gerados por regras e devem ser revisados antes de entregar.`;
+    $('#rodape').innerHTML = `Dados: <a href="https://dados.cvm.gov.br/dataset/cia_aberta-doc-dfp" target="_blank" rel="noopener">CVM, Portal de Dados Abertos</a> (licença ODbL).${FIXO ? ' Índices calculados com saldos finais e ano de 360 dias, em um sistema web desenvolvido pelo grupo.' : ' Os textos são gerados por regras e devem ser revisados antes de entregar.'}`;
     if (FIXO) abrirEmpresa(TRABALHO.empresa, TRABALHO.de, TRABALHO.ate, true);
     else if (state.cvm && state.caso.preset === 'cvm') abrirEmpresa(state.cvm.c, state.cvm.de, state.cvm.ate, true);
     else if (!restaurado) {
@@ -655,9 +652,9 @@ function recalcular() {
   if (!cvm) $('#periodos').hidden = true;
   const faixa = `${p[0]}${p.length > 1 ? ' a ' + p[p.length - 1] : ''}`;
   const per = cvm && FIXO ? `${esc(faixa)} · ` : cvm ? `<span class="so-impressao">${esc(faixa)} · </span>` : `${esc(`${p.length} ${p.length === 1 ? 'período' : 'períodos'} (${faixa})`)} · `;
-  $('#meta-caso').innerHTML = per + esc(`${origem} · parâmetros ${padrao ? 'padrão' : 'personalizados'}${state.editado ? ' · dados editados' : ''}`);
+  $('#meta-caso').innerHTML = per + esc(FIXO ? `${origem} · demonstrações consolidadas` : `${origem} · parâmetros ${padrao ? 'padrão' : 'personalizados'}${state.editado ? ' · dados editados' : ''}`);
   TIPS.clear(); esconderDica();
-  renderAnalise(); renderMapa(); renderEstrutura(); renderDemo(); renderTrabalho();
+  renderAnalise(); renderMapa(); renderEstrutura(); renderDemo(); renderTrabalho(); renderEmpresa(); renderEquipe();
   salvar();
 }
 
@@ -692,14 +689,18 @@ const urlSite = s => /^https?:\/\//i.test(s) ? s : 'https://' + s.replace(/^\/+/
 // Os textos do trabalho só valem para a empresa e os anos do trabalho (com os dados ainda carregando, usa o do sistema).
 const trabalhoPronto = () => FIXO && state.caso.cd_cvm === TRABALHO.empresa && state.caso.periodos[0] === TRABALHO.de && state.caso.periodos[state.caso.periodos.length - 1] === TRABALHO.ate;
 const preencher = t => TX.preencher(t, state.caso, R);
-const estiloTrabalho = () => trabalhoPronto() && (state.estilo === 'combinado' || state.estilo === 'grupo');
+const estiloTrabalho = () => trabalhoPronto() && ['final', 'combinado', 'grupo'].includes(state.estilo);
 function textoIndice(i) {
   if (state.estilo === 'auto') return TX.estiloGrupo(i, R, state.caso);
-  if (estiloTrabalho()) { const t = TRABALHO[state.estilo][i.id]; if (t) return preencher(t); }
+  if (estiloTrabalho()) {
+    const versao = state.estilo === 'final' ? (TRABALHO.textoFinal || {})[i.id] || 'combinado' : state.estilo;
+    const t = (TRABALHO[versao] || {})[i.id]; if (t) return preencher(t);
+  }
   return i.texto;
 }
-const usaTextoSistema = i => estiloTrabalho() && !TRABALHO[state.estilo][i.id];
+const usaTextoSistema = i => estiloTrabalho() && state.estilo !== 'final' && !TRABALHO[state.estilo][i.id];
 function seletorEstilo() {
+  if (ESTILOS.length < 2) return '';
   const atual = ESTILOS.find(([k]) => k === state.estilo) || ESTILOS[0];
   return `<div class="seletor-texto"><label>Versão do texto <select class="sel-estilo" aria-describedby="desc-estilo">${ESTILOS.map(([k, n]) => `<option value="${k}"${state.estilo === k ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label><span class="nota">${esc(atual[2])}</span></div>`;
 }
@@ -794,7 +795,7 @@ async function renderTrabalho() {
   const el = $('#p-trab'); if (!el) return;
   const seq = ++trabSeq;
   if (!window.Relatorio || !R) { el.innerHTML = '<p class="nota">Carregando…</p>'; return; }
-  const api = { state, R, TRABALHO, trabalhoPronto, estiloTrabalho, preencher, textoIndice, nomeIndice, fichaEmpresa, fmtR, dadosDemo: () => null, carregarScript, nomeEstilo: nomeEstilo() };
+  const api = { state, R, TRABALHO, trabalhoPronto, estiloTrabalho, preencher, textoIndice, nomeIndice, fichaEmpresa, fmtR, dadosDemo: demo => dadosDemo(demo), carregarScript, nomeEstilo: nomeEstilo() };
   let M; try { M = await window.Relatorio.montar(api, { web: true }); } catch (e) { console.error(e); el.innerHTML = '<p class="nota">Não foi possível montar o texto do trabalho.</p>'; return; }
   if (seq !== trabSeq) return;
   window.Relatorio.numerar(M.B);
@@ -820,6 +821,7 @@ async function renderTrabalho() {
     else if (b.t === 'tabela') add(`<figure class="abnt"><figcaption>Tabela ${b.n} – ${esc(b.titulo)}</figcaption><div class="rolagem"><table><thead><tr>${b.cab.map((c, k) => `<th${b.dir.includes(k) ? ' class="n"' : ''}>${esc(c)}</th>`).join('')}</tr></thead><tbody>${b.linhas.map((l, r) => `<tr${b.negrito.includes(r) ? ' class="g"' : ''}>${l.map((c, k) => `<td${b.dir.includes(k) ? ' class="n"' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="fonte">${esc(b.fonte)}</p></figure>`);
     else if (b.t === 'grafico') add(`<figure class="abnt"><figcaption>Gráfico ${b.n} – ${esc(b.titulo)}</figcaption>${graficoSVG(b.grupo)}<p class="fonte">${esc(b.fonte)}</p></figure>`);
     else if (b.t === 'refs') { novoCap('cap-refs', '', 'Referências'); add(`<div class="refs">${b.itens.map(r => `<p>${negritoHTML(r)}</p>`).join('')}</div>`); }
+    else if (b.t === 'apendice') { const m = b.texto.match(/^Apêndice (\w) – (.*)$/); novoCap('cap-ap-' + (m ? m[1] : caps.length), m ? `Ap. ${m[1]}` : '', m ? m[2].replace(/ consolidad[oa] da .*$/, '') : b.texto); }
   }
   fechaLista();
   const abertos = new Set(state.trabAbertos || ['cap-resumo']);
@@ -828,6 +830,50 @@ async function renderTrabalho() {
   h += `<div class="doc-layout"><nav class="doc-index" aria-label="Sumário do trabalho"><span class="lbl">Sumário</span><ol>${idx}</ol><div class="doc-botoes"><button class="btn mini" type="button" data-doc="abrir">Abrir tudo</button><button class="btn mini" type="button" data-doc="fechar">Fechar tudo</button></div></nav><div class="doc">${corpo}</div></div>`;
   el.innerHTML = h;
 }
+// ---------- aba Empresa (página do trabalho) ----------
+function renderEmpresa() {
+  const el = $('#p-empresa'); if (!el || !FIXO) return;
+  if (!trabalhoPronto()) { el.innerHTML = '<p class="nota">Carregando…</p>'; return; }
+  const T = TRABALHO, C = T.caracterizacao;
+  const produtos = C.secoes.find(s2 => s2.itens);
+  const areas = (produtos ? produtos.itens : []).map(t => { const [n, ...r] = preencher(t).replace(/;$|\.$/, '').split(':'); const d = r.join(':').trim(); return `<li><b>${esc(n)}</b>${esc(d.charAt(0).toUpperCase() + d.slice(1))}.</li>`; }).join('');
+  el.innerHTML = `
+    <p class="emp-lead">${esc(T.apresentacao)}</p>
+    <dl class="emp-numeros">${T.destaques.map(([v, l]) => `<div><dt>${esc(l)}</dt><dd>${esc(preencher(v).replace(/ bilhões| bilhão/, ' bi'))}</dd></div>`).join('')}</dl>
+    <p class="nota">${esc(T.fonteDestaques)}</p>
+    <div class="emp-grade">
+      <section aria-labelledby="h-ident"><h2 id="h-ident">Identificação</h2>
+        <dl class="registro">${C.identificacao.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${/^https?:/.test(v) ? `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v.replace(/^https?:\/\//, ''))}</a>` : esc(v)}</dd></div>`).join('')}</dl>
+        <p class="nota">${esc(C.fonteIdentificacao)}</p>
+      </section>
+      <section aria-labelledby="h-tempo"><h2 id="h-tempo">Trajetória</h2>
+        <ol class="tempo">${T.marcos.map(([a, t]) => `<li><time>${esc(a)}</time><span>${esc(t)}</span></li>`).join('')}</ol>
+        <p class="nota">${esc(T.fonteMarcos)}</p>
+      </section>
+    </div>
+    <section aria-labelledby="h-areas"><h2 id="h-areas" style="font-size:19px;margin:0 0 10px">Áreas de negócio</h2><ul class="areas">${areas}</ul></section>
+    <div class="emp-mais"><button class="btn primario" type="button" data-ler="cap-2">Ler a caracterização completa</button><span class="nota">Histórico, produtos, mercado, concorrência e desempenho recente estão no capítulo 2 do trabalho.</span></div>`;
+}
+// ---------- aba Equipe ----------
+function renderEquipe() {
+  const el = $('#p-equipe'); if (!el || !FIXO) return;
+  const C = TRABALHO.capa;
+  el.innerHTML = `<div class="equipe-tab">
+    <p class="disciplina">${esc(C.disciplina)}</p>
+    <dl class="registro">
+      <div><dt>Instituição</dt><dd>Universidade Paranaense – UNIPAR, ${esc(C.cidade[0] + C.cidade.slice(1).toLowerCase())} (${esc(C.uf)})</dd></div>
+      <div><dt>Cursos</dt><dd>Administração e Ciências Contábeis</dd></div>
+      <div><dt>Professora</dt><dd>${esc(C.professora)}</dd></div>
+      <div><dt>Trabalho</dt><dd>Análise das demonstrações contábeis da WEG S.A., exercícios de ${esc(TRABALHO.de)} a ${esc(TRABALHO.ate)}</dd></div>
+      <div><dt>Ano</dt><dd>${esc(C.ano)}</dd></div>
+    </dl>
+    <section aria-labelledby="h-integrantes"><h2 id="h-integrantes">Integrantes</h2>
+      <div class="rolagem"><table><thead><tr><th>Nome</th><th>Curso</th><th class="n">RA</th></tr></thead><tbody>${C.alunos.map(([n, c, ra]) => `<tr><td>${esc(n)}</td><td>${esc(c)}</td><td class="n ra">${esc(ra)}</td></tr>`).join('')}</tbody></table></div>
+    </section>
+    ${PODE_EXPORTAR ? `<section aria-labelledby="h-arquivos"><h2 id="h-arquivos">Relatório</h2><div class="trab-acoes"><button class="btn primario" type="button" data-rel="pdf">Baixar relatório em PDF</button><button class="btn" type="button" data-rel="docx">Baixar em Word</button></div></section>` : ''}
+  </div>`;
+}
+
 // abrir/fechar capítulos, lembrando o que ficou aberto
 function guardarAbertos() { state.trabAbertos = [...document.querySelectorAll('#p-trab details[open]')].map(d => d.id); salvar(); }
 document.addEventListener('toggle', e => { if (e.target.closest && e.target.closest('#p-trab')) guardarAbertos(); }, true);
@@ -837,7 +883,9 @@ document.addEventListener('click', e => {
   const a = e.target.closest('[data-abrir]');
   if (a) { const d = document.getElementById(a.dataset.abrir); if (d) { d.open = true; let p = d.parentElement && d.parentElement.closest('details'); while (p) { p.open = true; p = p.parentElement && p.parentElement.closest('details'); } } return; }
   const r = e.target.closest('[data-rel]'); if (r) { gerarRelatorio(r.dataset.rel); return; }
-  const ir = e.target.closest('[data-ir]'); if (ir) { e.preventDefault(); irAba(ir.dataset.ir); window.scrollTo(0, 0); }
+  const ir = e.target.closest('[data-ir]'); if (ir) { e.preventDefault(); irAba(ir.dataset.ir); window.scrollTo(0, 0); return; }
+  const ler = e.target.closest('[data-ler]');
+  if (ler) { irAba('trab'); const d = document.getElementById(ler.dataset.ler); if (d) { d.open = true; guardarAbertos(); requestAnimationFrame(() => d.scrollIntoView({ block: 'start' })); } }
 });
 window.addEventListener('beforeprint', () => { if (state.aba === 'trab') document.querySelectorAll('#p-trab details').forEach(d => { d.open = true; }); });
 
@@ -847,7 +895,7 @@ function renderAnalise() {
   if (R.avisos.length) h += `<div class="aviso" role="status"><strong>Confira os dados antes de usar a análise</strong><ul>${R.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>`;
   if (per.length < 2) h += `<div class="aviso"><strong>Só um período selecionado.</strong> Os índices são calculados, mas a análise de evolução precisa de pelo menos dois períodos.</div>`;
   h += seletorEstilo();
-  h += `<div class="barra-acoes"><button class="btn primario" type="button" data-copiar="tudo">Copiar análise completa</button><span class="nota">${state.estilo === 'auto' ? 'Estilo do grupo gerado automaticamente, para validação. ' : ''}Os números vêm dos cálculos do site; revise antes de entregar. Os valores <span class="sublinhado">sublinhados</span> mostram a fórmula e o cálculo.</span></div>`;
+  h += `<div class="barra-acoes"><button class="btn primario" type="button" data-copiar="tudo">Copiar análise completa</button><span class="nota">${state.estilo === 'auto' ? 'Estilo do grupo gerado automaticamente, para validação. ' : ''}${FIXO ? '' : 'Os números vêm dos cálculos do site; revise antes de entregar. '}Os valores <span class="sublinhado">sublinhados</span> mostram a fórmula e o cálculo.</span></div>`;
   h += `<div class="copia-fallback" id="copia-fallback" hidden><label for="ta-fallback" class="nota">A cópia automática foi bloqueada. Selecione e copie:</label><textarea id="ta-fallback" readonly></textarea></div>`;
   if (state.caso.fonte) h += `<p class="nota">Fonte: ${esc(state.caso.fonte)}</p>`;
   if (FIXO) h += `<p class="nota">A caracterização da empresa, a interpretação e a conclusão estão na aba <a href="#" data-ir="trab">Trabalho</a>.</p>`;
@@ -1103,13 +1151,13 @@ $('#arq-importar').addEventListener('change', e => {
   rd.readAsText(f, 'utf-8');
 });
 // ---------- exportação da aba aberta (PDF, Word, CSV) ----------
-const NOME_ABA = { trab: FIXO ? 'Trabalho' : 'Relatório', analise: 'Análise', mapa: 'Estruturas', demo: 'Demonstrações', estrutura: 'AV e AH', dados: 'Dados', params: 'Parâmetros' };
+const NOME_ABA = { trab: FIXO ? 'Trabalho' : 'Relatório', empresa: 'Empresa', equipe: 'Equipe', analise: 'Análise', mapa: 'Estruturas', demo: 'Demonstrações', estrutura: 'AV e AH', dados: 'Dados', params: 'Parâmetros' };
 const numCSV = v => v == null || v === '' ? '' : String(Math.round(Number(v) * 100) / 100).replace('.', ',');
 const linhaCSV = arr => arr.map(x => { const t = String(x == null ? '' : x); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(';');
 async function csvDaAba() {
   const per = state.caso.periodos, L = [];
   const aba = state.aba;
-  if (aba === 'analise' || aba === 'trab') {
+  if (aba === 'analise' || aba === 'trab' || aba === 'empresa' || aba === 'equipe') {
     L.push(linhaCSV(['Grupo', 'Sigla', 'Índice', 'Fórmula', ...per, 'Evolução']));
     for (const g of R.grupos) for (const id of g.ids) { const i = R.by[id]; L.push(linhaCSV([g.titulo, i.id, nomeIndice(i), i.formula, ...i.vals.map(numCSV), i.t ? (i.t.est ? 'estável' : i.t.melhora ? 'melhora' : 'piora') : ''])); }
   } else if (aba === 'mapa') {
@@ -1146,7 +1194,7 @@ const PDF_LIBS = [
   'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
   'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'
 ];
-const TITULO_ABA = { trab: 'Relatório de análise', analise: 'Análise das demonstrações contábeis', mapa: 'Estruturas: balanço, DRE e fluxo de caixa', demo: 'Demonstrações contábeis', estrutura: 'Análise vertical e horizontal', dados: 'Dados do caso', params: 'Parâmetros da análise' };
+const TITULO_ABA = { trab: 'Relatório de análise', empresa: 'Relatório de análise', equipe: 'Relatório de análise', analise: 'Análise das demonstrações contábeis', mapa: 'Estruturas: balanço, DRE e fluxo de caixa', demo: 'Demonstrações contábeis', estrutura: 'Análise vertical e horizontal', dados: 'Dados do caso', params: 'Parâmetros da análise' };
 const fmtCel = v => v == null ? '' : fmtN(v, Number.isInteger(v) ? 0 : 2);
 async function documentoDaAba() {
   const aba = state.aba, per = state.caso.periodos;
@@ -1316,12 +1364,12 @@ async function pdfDoDocumento(doc) {
   return pdf.output('blob');
 }
 $('#btn-word').addEventListener('click', async () => {
-  if (state.aba === 'trab') return gerarRelatorio('docx');
+  if (['trab', 'empresa', 'equipe'].includes(state.aba)) return gerarRelatorio('docx');
   const doc = await documentoDaAba();
   baixar(`${slug(NOME_ABA[state.aba])}-${slug(state.caso.empresa)}.doc`, '﻿' + wordDoDocumento(doc), 'application/msword');
 });
 $('#btn-pdf').addEventListener('click', async () => {
-  if (state.aba === 'trab') return gerarRelatorio('pdf');
+  if (['trab', 'empresa', 'equipe'].includes(state.aba)) return gerarRelatorio('pdf');
   const b = $('#btn-pdf'); const rot = b.textContent;
   b.disabled = true; b.textContent = 'Gerando PDF…'; esconderDica();
   try {
@@ -1456,7 +1504,8 @@ document.addEventListener('click', e => {
 
 function aplicarModo() {
   document.documentElement.dataset.modo = FIXO ? 'trabalho' : 'livre';
-  if (FIXO) for (const id of ['#btn-trocar', '#btn-json', '#menu-mais']) { const el = $(id); if (el) el.hidden = true; }
+  if (FIXO) for (const id of ['#btn-trocar', '#btn-json', '#menu-mais', '#t-dados', '#t-params']) { const el = $(id); if (el) el.hidden = true; }
+  for (const id of ['#t-empresa', '#t-equipe']) $(id).hidden = !FIXO;
   if (!FIXO) $('#t-trab').textContent = 'Relatório';
   // o relatório é gerado no navegador com bibliotecas externas: só onde a exportação funciona
   for (const id of ['#btn-rel-pdf', '#btn-rel-word', '#sep-rel']) { const el = $(id); if (el) el.hidden = !PODE_EXPORTAR; }

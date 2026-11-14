@@ -27,6 +27,9 @@ for (const [nome, t] of textos) {
   const o = T.preencher(t, caso, R);
   checa(!o.includes('[?]') && !o.includes('{{') && !/NaN|undefined|Infinity/.test(o), `${nome}: marcador sem valor → ${o.slice(0, 160)}`);
 }
+// versão entregue: um texto escolhido para cada um dos 17 índices
+for (const i of R.indices) checa(['combinado', 'grupo'].includes((TR.textoFinal || {})[i.id]), `textoFinal sem escolha válida para ${i.id}`);
+for (const t of (TR.destaques || []).map(d => d[0])) { const o = T.preencher(t, caso, R); checa(!o.includes('[?]'), `destaque da aba Empresa: ${o}`); }
 // todos os 17 índices têm texto combinado
 for (const i of R.indices) checa(TR.combinado[i.id], `combinado sem texto para ${i.id}`);
 // os números do texto são os do site
