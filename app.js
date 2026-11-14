@@ -11,7 +11,8 @@ const TRABALHO = window.TRABALHO || null;
 const FIXO = !!TRABALHO;
 const TX = window.Textos;
 const CHAVE = FIXO ? 'analisador-dc-trabalho-v3' : 'analisador-dc-v3';
-const ABAS = FIXO ? ['trab', 'empresa', 'analise', 'mapa', 'demo', 'estrutura', 'equipe'] : ['trab', 'analise', 'mapa', 'demo', 'estrutura', 'dados', 'params'];
+const ABAS = FIXO ? ['trab', 'empresa', 'analise', 'mapa', 'demo', 'estrutura', 'equipe'] : ['trab', 'empresa', 'analise', 'mapa', 'demo', 'estrutura', 'dados', 'params', 'equipe'];
+const EQUIPE = window.EQUIPE || null;
 const E_SISTEMA = ['sistema', 'Texto do sistema', 'Texto gerado pelas regras do sistema, sem ajustes manuais.'];
 const E_AUTO = ['auto', 'Estilo do grupo, automático (em teste)', 'Gerador que escreve no estilo dos textos do grupo para qualquer empresa. Serve para o grupo validar.'];
 // Na página do trabalho o texto de cada índice é o escolhido pelo grupo (TRABALHO.textoFinal); sem seletor.
@@ -832,7 +833,8 @@ async function renderTrabalho() {
 }
 // ---------- aba Empresa (página do trabalho) ----------
 function renderEmpresa() {
-  const el = $('#p-empresa'); if (!el || !FIXO) return;
+  const el = $('#p-empresa'); if (!el) return;
+  if (!FIXO) return renderEmpresaCVM(el);
   if (!trabalhoPronto()) { el.innerHTML = '<p class="nota">Carregando…</p>'; return; }
   const T = TRABALHO, C = T.caracterizacao;
   const produtos = C.secoes.find(s2 => s2.itens);
@@ -854,17 +856,44 @@ function renderEmpresa() {
     <section aria-labelledby="h-areas"><h2 id="h-areas" style="font-size:19px;margin:0 0 10px">Áreas de negócio</h2><ul class="areas">${areas}</ul></section>
     <div class="emp-mais"><button class="btn primario" type="button" data-ler="cap-2">Ler a caracterização completa</button><span class="nota">Histórico, produtos, mercado, concorrência e desempenho recente estão no capítulo 2 do trabalho.</span></div>`;
 }
+// página explorar: o que os dados da CVM trazem sobre qualquer companhia
+function renderEmpresaCVM(el) {
+  const c = state.caso, per = c.periodos, u = per.length - 1, pf = c.perfil || {};
+  if (!R || !per.length) { el.innerHTML = '<p class="nota">Carregando…</p>'; return; }
+  const v = expr => TX.avaliar(expr, u, c, R);
+  const curto = t => String(t).replace(/ bilhões| bilhão/, ' bi').replace(/ milhões| milhão/, ' mi');
+  const partes = [];
+  const setor = pf.setor || c.setor;
+  if (setor) partes.push(`do setor “${setor}”`);
+  if (pf.sede) partes.push(`com sede em ${pf.sede.replace(/,\s*([A-Z]{2})$/, ' ($1)')}`);
+  if (/^\d{4}/.test(pf.fundacao || '')) partes.push(`constituída em ${pf.fundacao.slice(0, 4)}`);
+  const lead = c.preset === 'cvm' ? `Companhia aberta${partes.length ? ' ' + partes.join(', ') : ''}.` : 'Caso informado pelo usuário.';
+  const nums = c.escala === 'mil' || c.preset === 'cvm' ? [
+    [TX.rs(v('DRE.RL'), c), `de receita líquida em ${per[u]}`], [TX.rs(v('DRE.LL'), c), `de lucro líquido em ${per[u]}`],
+    [TX.rs(v('AT'), c), `de ativo total ao fim de ${per[u]}`], [TX.rs(v('PL'), c), `de patrimônio líquido ao fim de ${per[u]}`]
+  ].filter(([x]) => !x.includes('[?]')) : [];
+  const ficha = fichaEmpresa();
+  el.innerHTML = `
+    <p class="emp-lead">${esc(lead)}</p>
+    ${nums.length ? `<dl class="emp-numeros">${nums.map(([x, l]) => `<div><dt>${esc(l)}</dt><dd>${esc(curto(x))}</dd></div>`).join('')}</dl><p class="nota">Fonte: demonstrações financeiras padronizadas da companhia (CVM).</p>` : ''}
+    <div class="emp-grade">
+      ${ficha.length ? `<section aria-labelledby="h-ident"><h2 id="h-ident">Identificação</h2><dl class="registro">${ficha.map(([k, x]) => `<div><dt>${esc(k)}</dt><dd>${k === 'Site' ? `<a href="${esc(urlSite(x))}" target="_blank" rel="noopener">${esc(x)}</a>` : esc(x)}</dd></div>`).join('')}</dl><p class="nota">Fonte: cadastro e formulário cadastral da CVM.</p></section>` : ''}
+      ${R.abertura ? `<section aria-labelledby="h-apres"><h2 id="h-apres">Apresentação</h2><p class="leitura">${esc(R.abertura)}</p></section>` : ''}
+    </div>
+    <p class="nota">Histórico, produtos, mercado e concorrentes não fazem parte dos dados abertos da CVM. Eles ficam no site de relações com investidores da empresa${pf.site ? ` (<a href="${esc(urlSite(pf.site))}" target="_blank" rel="noopener">${esc(pf.site)}</a>)` : ''}.</p>`;
+}
+
 // ---------- aba Equipe ----------
 function renderEquipe() {
-  const el = $('#p-equipe'); if (!el || !FIXO) return;
-  const C = TRABALHO.capa;
+  const el = $('#p-equipe'); if (!el || !EQUIPE) return;
+  const C = EQUIPE;
   el.innerHTML = `<div class="equipe-tab">
     <p class="disciplina">${esc(C.disciplina)}</p>
     <dl class="registro">
       <div><dt>Instituição</dt><dd>Universidade Paranaense – UNIPAR, ${esc(C.cidade[0] + C.cidade.slice(1).toLowerCase())} (${esc(C.uf)})</dd></div>
       <div><dt>Cursos</dt><dd>Administração e Ciências Contábeis</dd></div>
       <div><dt>Professora</dt><dd>${esc(C.professora)}</dd></div>
-      <div><dt>Trabalho</dt><dd>Análise das demonstrações contábeis da WEG S.A., exercícios de ${esc(TRABALHO.de)} a ${esc(TRABALHO.ate)}</dd></div>
+      <div><dt>Trabalho</dt><dd>Análise das demonstrações contábeis da WEG S.A., exercícios de 2023 a 2025</dd></div>
       <div><dt>Ano</dt><dd>${esc(C.ano)}</dd></div>
     </dl>
     <section aria-labelledby="h-integrantes"><h2 id="h-integrantes">Integrantes</h2>
@@ -1505,7 +1534,7 @@ document.addEventListener('click', e => {
 function aplicarModo() {
   document.documentElement.dataset.modo = FIXO ? 'trabalho' : 'livre';
   if (FIXO) for (const id of ['#btn-trocar', '#btn-json', '#menu-mais', '#t-dados', '#t-params']) { const el = $(id); if (el) el.hidden = true; }
-  for (const id of ['#t-empresa', '#t-equipe']) $(id).hidden = !FIXO;
+  $('#t-empresa').hidden = false; $('#t-equipe').hidden = !EQUIPE;
   if (!FIXO) $('#t-trab').textContent = 'Relatório';
   // o relatório é gerado no navegador com bibliotecas externas: só onde a exportação funciona
   for (const id of ['#btn-rel-pdf', '#btn-rel-word', '#sep-rel']) { const el = $(id); if (el) el.hidden = !PODE_EXPORTAR; }

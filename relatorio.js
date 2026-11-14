@@ -195,9 +195,10 @@
     }
 
     // Pré-textuais
+    const EQ = (typeof window !== 'undefined' && window.EQUIPE) || {};
     const capa = T ? T.capa : {
-      instituicao: '', cursos: '', disciplina: '', professora: '', alunos: [], titulo: `ANÁLISE DAS DEMONSTRAÇÕES CONTÁBEIS DA ${emp.toUpperCase()}`,
-      subtitulo: `relatório de análise por indicadores (${faixa})`, natureza: 'Relatório de análise das demonstrações contábeis por meio de indicadores.', orientacao: '', cidade: '', uf: '', ano: String(new Date().getFullYear())
+      instituicao: '', cursos: '', disciplina: '', professora: '', alunos: [], ...EQ, titulo: `ANÁLISE DAS DEMONSTRAÇÕES CONTÁBEIS DA ${emp.toUpperCase()}`,
+      subtitulo: `relatório de análise por indicadores (${faixa})`, natureza: EQ.disciplina ? `Relatório de análise das demonstrações contábeis por meio de indicadores, elaborado na disciplina de ${EQ.disciplina}, dos cursos de Administração e Ciências Contábeis da Universidade Paranaense – UNIPAR.` : 'Relatório de análise das demonstrações contábeis por meio de indicadores.', orientacao: EQ.professora ? `Orientadora: ${EQ.professora}.` : '', cidade: EQ.cidade || '', uf: EQ.uf || '', ano: EQ.ano || String(new Date().getFullYear())
     };
     return {
       capa, emp, per, B, tabelas, graficos,

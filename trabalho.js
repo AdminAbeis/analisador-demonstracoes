@@ -49,23 +49,11 @@ window.TRABALHO = {
   fonteMarcos: 'Fonte: WEG (2026b).',
 
   capa: {
-    instituicao: 'UNIVERSIDADE PARANAENSE – UNIPAR',
-    cursos: 'CURSOS DE ADMINISTRAÇÃO E CIÊNCIAS CONTÁBEIS',
-    disciplina: 'Demonstrativos Financeiros, Estrutura e Análise',
-    professora: 'Profa. Isabel Cristina Gozer',
-    alunos: [
-      ['Diogo de Campos Martins', 'Ciências Contábeis', '60007144'],
-      ['Eduardo Henrique Zuffo', 'Administração', '60009637'],
-      ['Gustavo Gabriel dos Santos Sampaio', 'Administração', '60006885'],
-      ['Márcio Eller', 'Administração', '60007883'],
-      ['Miguel de Lima Balani', 'Administração', '60006229'],
-      ['Renan Tuci Afonso', 'Ciências Contábeis', '60005425']
-    ],
+    ...window.EQUIPE, // equipe.js: instituição, cursos, disciplina, professora, alunos, cidade e ano
     titulo: 'ANÁLISE DAS DEMONSTRAÇÕES CONTÁBEIS DA WEG S.A.',
     subtitulo: 'relatório de análise por indicadores dos exercícios de 2023 a 2025',
     natureza: 'Relatório de análise apresentado à disciplina de Demonstrativos Financeiros, Estrutura e Análise, dos cursos de Administração e Ciências Contábeis da Universidade Paranaense – UNIPAR, como requisito parcial de avaliação.',
-    orientacao: 'Orientadora: Profa. Isabel Cristina Gozer.',
-    cidade: 'UMUARAMA', uf: 'PR', ano: '2026'
+    orientacao: 'Orientadora: Profa. Isabel Cristina Gozer.'
   },
 
   resumo: 'Este relatório analisa a situação econômico-financeira da WEG S.A., fabricante brasileira de equipamentos eletroeletrônicos listada no segmento Novo Mercado da B3, nos exercícios de {{anos}}. A partir do balanço patrimonial, da demonstração do resultado e da demonstração dos fluxos de caixa consolidados, extraídos das demonstrações financeiras padronizadas arquivadas na Comissão de Valores Mobiliários, foram calculados dezessete indicadores de liquidez, estrutura de capital, rentabilidade e atividade, interpretados em conjunto com as contas que explicam cada variação. Os resultados mostram uma empresa rentável e geradora de caixa: a receita líquida cresceu {{pct:DRE.RL@2023>2025}} no período, a rentabilidade do patrimônio líquido chegou a {{i:RPL@2025}} em 2025 e a dívida com juros permaneceu inferior às disponibilidades. A liquidez diminuiu e a participação de capitais de terceiros subiu para {{i:PCT@2025}}, movimentos explicados principalmente pela distribuição de dividendos sobre reservas de lucros e pelo aumento dos adiantamentos de clientes, e não por endividamento bancário. O principal ponto de atenção é o alongamento do prazo de estocagem, que elevou o ciclo financeiro para {{i:CF@2025}} e a necessidade de capital de giro.',

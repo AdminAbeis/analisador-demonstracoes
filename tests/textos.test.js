@@ -5,8 +5,10 @@ const path = require('path');
 const E = require('../engine.js');
 const T = require('../textos.js');
 global.window = {};
+require('../equipe.js');
 require('../trabalho.js');
 const TR = global.window.TRABALHO;
+if (!TR.capa.alunos || TR.capa.alunos.length !== 6) { console.error('Falha: capa sem os integrantes de equipe.js'); process.exit(1); }
 
 const erros = [];
 const checa = (c, m) => { if (!c) erros.push(m); };
