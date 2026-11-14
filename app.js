@@ -802,7 +802,7 @@ async function renderTrabalho() {
   window.Relatorio.numerar(M.B);
   const T = trabalhoPronto() ? TRABALHO : null;
   let h = `<div class="trab-topo">`;
-  if (T) h += `<p class="equipe"><b>${esc(T.capa.instituicao)}</b> · ${esc(T.capa.disciplina)} · ${esc(T.capa.professora)}<br>${T.capa.alunos.map(a => esc(a[0])).join(' · ')}</p>`;
+  if (T) h += `<p class="equipe"><b>${esc(T.capa.instituicao)}</b> · ${esc(T.capa.disciplina)} · Professora ${esc(T.capa.professora)}<br>${T.capa.alunos.map(a => esc(a[0])).join(' · ')}</p>`;
   h += kpisTrabalho();
   h += `<div class="trab-acoes">${PODE_EXPORTAR ? `<button class="btn primario" type="button" data-rel="pdf">Baixar relatório em PDF</button><button class="btn" type="button" data-rel="docx">Baixar em Word</button>` : ''}${seletorEstilo()}</div></div>`;
   // capítulos

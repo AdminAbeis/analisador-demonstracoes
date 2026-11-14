@@ -3,7 +3,7 @@ window.EQUIPE = {
   instituicao: 'UNIVERSIDADE PARANAENSE – UNIPAR',
   cursos: 'CURSOS DE ADMINISTRAÇÃO E CIÊNCIAS CONTÁBEIS',
   disciplina: 'Demonstrativos Financeiros, Estrutura e Análise',
-  professora: 'Profa. Isabel Cristina Gozer',
+  professora: 'Isabel Cristina Gozer', // só o nome: os rótulos (Professora, Orientadora) ficam nas páginas
   alunos: [
     ['Diogo de Campos Martins', 'Ciências Contábeis', '60007144'],
     ['Eduardo Henrique Zuffo', 'Administração', '60009637'],

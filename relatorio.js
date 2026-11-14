@@ -343,7 +343,7 @@
     doc.setFont('times', 'bold'); doc.setFontSize(14);
     doc.splitTextToSize(limpa(C.titulo + (C.subtitulo ? ':' : '')), W).forEach(l => { centro(l, y, 'bold', 14); y += LH; });
     if (C.subtitulo) doc.splitTextToSize(limpa(C.subtitulo), W).forEach(l => { centro(l, y, 'normal', 12); y += LH; });
-    if (C.professora) centro(`Professora: ${C.professora.replace(/^Profa\.\s*/, '')}`, 245);
+    if (C.professora) centro(`Professora: ${C.professora}`, 245);
     if (C.cidade) centro(`${C.cidade}${C.uf ? ' – ' + C.uf : ''}`, H - MB - LH * 1.2);
     centro(C.ano, H - MB);
 
@@ -493,7 +493,7 @@
     for (const [nome, , ra] of (C.alunos || [])) capa.push(centro(`${nome.toUpperCase()}${ra ? ' – RA ' + ra : ''}`));
     capa.push(centro(C.titulo + (C.subtitulo ? ':' : ''), { bold: true, size: 28, antes: 2200 }));
     if (C.subtitulo) capa.push(centro(C.subtitulo));
-    if (C.professora) capa.push(centro(`Professora: ${C.professora.replace(/^Profa\.\s*/, '')}`, { antes: 1800 }));
+    if (C.professora) capa.push(centro(`Professora: ${C.professora}`, { antes: 1800 }));
     capa.push(centro(`${C.cidade || ''}${C.uf ? ' – ' + C.uf : ''}`, { antes: C.professora ? 900 : 3600 }));
     capa.push(centro(C.ano));
 
